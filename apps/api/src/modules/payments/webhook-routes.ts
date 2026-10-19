@@ -40,7 +40,7 @@ export function paymentWebhookRoutes(ctx: AppContext) {
         if (!provider) throw new AppError(404, 'not_found', 'Not found.');
         let event;
         try {
-          event = provider.parseWebhook(request.rawBody ?? Buffer.alloc(0), request.headers);
+          event = await provider.parseWebhook(request.rawBody ?? Buffer.alloc(0), request.headers);
         } catch (err) {
           if (err instanceof WebhookVerificationError) {
             request.log.warn({ provider: params.provider }, 'rejected payment webhook: verification failed');
@@ -48,6 +48,7 @@ export function paymentWebhookRoutes(ctx: AppContext) {
           }
           throw err;
         }
+        if (!event) return { received: true, outcome: 'no_change' };
         const outcome = await ingestPaymentEvent(ctx, provider.name, event);
         request.log.info({ provider: provider.name, eventId: event.eventId, outcome }, 'payment webhook processed');
         return { received: true, outcome };

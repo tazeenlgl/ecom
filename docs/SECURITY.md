@@ -69,6 +69,7 @@ Customers can reach only their own records: every customer query filters by both
 - OTP codes and passwords are never logged. `LogMessageSender` logs only the channel, a masked recipient (every character except the last four replaced with `*`) and the template name. Codes are kept in an in-memory outbox for tests and local development.
 - Job payloads carry ids only, never personal data or secrets.
 - `.env` is git-ignored. `.env.example` contains no real values.
+- Per-store gateway secrets, such as the Paytm merchant key, are encrypted with AES-256-GCM (`CONFIG_ENCRYPTION_KEY`), are write-only through the admin API, and are left out of the audit log. Production refuses the development encryption key.
 
 ## Webhooks and payments
 

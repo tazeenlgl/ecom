@@ -8,7 +8,8 @@ Last reviewed 2026-10-19.
 | --- | --- | --- |
 | Real POS adapter | POS API not inspected. Server access was declined | Source or API docs, a sandbox, and answers to the unknowns in [POS_INTEGRATION.md](POS_INTEGRATION.md) |
 | Live SMS (OTP and notifications) | No provider chosen. Activation needs approval | Provider choice, DLT registration of templates (an Indian telecom requirement), credentials |
-| Live payment gateway | No provider chosen. Activation needs approval | Provider choice, sandbox credentials, then a separate approval for live |
+| Paytm on staging | The adapter is built, but no Paytm test MID or key is available to run it against staging | A store admin enters the staging MID and key with `PUT .../payment-gateways/paytm`, then a test payment confirms the checksum and API fields ([PAYMENTS.md](PAYMENTS.md#not-verified-yet)) |
+| Live Paytm | Needs the owner's approval | Staging verified, then `PAYTM_PRODUCTION_ENABLED=true` and the production MID and key |
 | Courier integration | No courier chosen | Courier choice and API docs |
 | Production deployment | Needs separate approval and hosting decisions | [DEPLOYMENT.md](DEPLOYMENT.md) |
 
@@ -18,18 +19,19 @@ Last reviewed 2026-10-19.
 2. **Login rate limits are in-process.** Admin and customer password logins, OTP verification and payment initiation limits reset on restart, and each instance counts separately. OTP *issue* limits are database-backed and hold across instances. Fix: move the limits to PostgreSQL or Redis before running more than one instance.
 3. **Recurring jobs are not scheduled.** `pos.sync_stock` and `payments.reconcile` run only when an admin endpoint queues them. A scheduler is needed: a cron-triggered endpoint or a self-rescheduling job.
 4. **Cached stock has no freshness limit.** If the live POS check fails at checkout, the read model is used whatever its age. A maximum age should be decided.
-5. **Duplicate online payments** (two successful payments for one order) are flagged but must be refunded by hand in the provider dashboard. Auto-refunding needs the real provider's refund semantics.
-6. **No GST breakdown for shipping or COD fees.** Tax is computed on item lines only. Invoicing and GST reporting are out of scope until the accounting owner is decided.
-7. **Multi-shipment orders.** Order fulfillment status follows the latest shipment event, so one delivered shipment marks the whole order delivered and completed.
-8. **The return window is hard-coded** at 7 days (`RETURN_WINDOW_DAYS`) instead of being a store setting.
-9. **Exchanges** are recorded and approved, but no replacement order is created automatically. Staff ship the replacement manually.
-10. **Reports** are basic: daily sales and top SKUs, in the store's timezone (default `Asia/Kolkata`). There is no export.
-11. **Local customer sign-in.** OTPs are never logged, so a developer cannot complete OTP sign-in by hand against `npm run dev`. Possible fix: a development-only endpoint, refused in production, that returns the last code for a phone number. Not built without approval.
-12. **No CORS configuration** yet. The storefront UI will need an explicit origin allow-list per store domain.
-13. **Admin accounts have no multi-factor authentication.**
-14. **The audit log has no request id or IP address.**
-15. **Tests not written** for the content and reports endpoints and the worker loop ([TESTING.md](TESTING.md#not-covered-yet)).
-16. **An empty `apps/api/src/modules/pricing/` folder** is left over from the foundation. Price endpoints live in `catalogue`.
+5. **Paytm refunds stay `processing`** after Paytm accepts them. There is no refund-status webhook or poll yet, so the refund is not marked succeeded automatically. Paytm's API responses are also not signature-checked yet.
+6. **Duplicate online payments** (two successful payments for one order) are flagged but must be refunded by hand in the provider dashboard. Auto-refunding needs the real provider's refund semantics.
+7. **No GST breakdown for shipping or COD fees.** Tax is computed on item lines only. Invoicing and GST reporting are out of scope until the accounting owner is decided.
+8. **Multi-shipment orders.** Order fulfillment status follows the latest shipment event, so one delivered shipment marks the whole order delivered and completed.
+9. **The return window is hard-coded** at 7 days (`RETURN_WINDOW_DAYS`) instead of being a store setting.
+10. **Exchanges** are recorded and approved, but no replacement order is created automatically. Staff ship the replacement manually.
+11. **Reports** are basic: daily sales and top SKUs, in the store's timezone (default `Asia/Kolkata`). There is no export.
+12. **Local customer sign-in.** OTPs are never logged, so a developer cannot complete OTP sign-in by hand against `npm run dev`. Possible fix: a development-only endpoint, refused in production, that returns the last code for a phone number. Not built without approval.
+13. **No CORS configuration** yet. The storefront UI will need an explicit origin allow-list per store domain.
+14. **Admin accounts have no multi-factor authentication.**
+15. **The audit log has no request id or IP address.**
+16. **Tests not written** for the content and reports endpoints and the worker loop ([TESTING.md](TESTING.md#not-covered-yet)).
+17. **An empty `apps/api/src/modules/pricing/` folder** is left over from the foundation. Price endpoints live in `catalogue`.
 
 ## Risks
 

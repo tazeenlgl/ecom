@@ -28,7 +28,7 @@ Status key: **I** implemented · **P** partial · **PL** planned · **B** blocke
 | F20 | Immutable order item, price, customer and address snapshots | I | migration `0002`, `test/commerce.test.ts` |
 | F21 | Separate order, payment, fulfillment, POS-sync and return/refund state machines with legal transitions only | I | `modules/orders/state-machines.ts` |
 | F22 | Cancellation, return and exchange requests | I | `modules/orders/*-routes.ts` |
-| F23 | Provider-neutral payments, verified webhooks, duplicate and out-of-order handling, refunds, reconciliation | I (fake provider) | `modules/payments`, `test/payments.test.ts` |
+| F23 | Provider-neutral payments, verified webhooks, duplicate and out-of-order handling, refunds, reconciliation | I (fake provider); P (Paytm, not yet run on staging) | `modules/payments`, `test/payments.test.ts`, `test/paytm.test.ts` |
 | F24 | COD | I | `cod-collected` endpoint, zone COD flags |
 | F25 | Shipping zones, PIN serviceability, charges | I | `modules/shipping` |
 | F26 | Shipments, tracking events, delivery failure, RTO | I (manual entry) | `shipments`, `shipment_events` |

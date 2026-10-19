@@ -1,4 +1,4 @@
-import { createHash, createHmac, randomBytes, randomInt, scrypt, timingSafeEqual } from 'node:crypto';
+import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, randomInt, scrypt, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
 
 const scryptAsync = promisify(scrypt) as (
@@ -50,3 +50,22 @@ export async function verifyPassword(password: string, stored: string): Promise<
 /** Used to equalise timing when an account does not exist. */
 export const DUMMY_PASSWORD_HASH =
   'scrypt$16384$8$1$AAAAAAAAAAAAAAAAAAAAAA$' + Buffer.alloc(64).toString('base64url');
+
+/**
+ * Encrypts a stored secret (e.g. a gateway merchant key) with AES-256-GCM.
+ * Format: `v1.<iv>.<tag>.<ciphertext>` (base64url). `keyBase64` is CONFIG_ENCRYPTION_KEY.
+ */
+export function encryptSecret(keyBase64: string, plaintext: string): string {
+  const iv = randomBytes(12);
+  const cipher = createCipheriv('aes-256-gcm', Buffer.from(keyBase64, 'base64'), iv);
+  const ciphertext = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
+  return ['v1', iv.toString('base64url'), cipher.getAuthTag().toString('base64url'), ciphertext.toString('base64url')].join('.');
+}
+
+export function decryptSecret(keyBase64: string, stored: string): string {
+  const [version, iv, tag, ciphertext] = stored.split('.');
+  if (version !== 'v1' || !iv || !tag || ciphertext === undefined) throw new Error('Unrecognised encrypted secret');
+  const decipher = createDecipheriv('aes-256-gcm', Buffer.from(keyBase64, 'base64'), Buffer.from(iv, 'base64url'));
+  decipher.setAuthTag(Buffer.from(tag, 'base64url'));
+  return Buffer.concat([decipher.update(Buffer.from(ciphertext, 'base64url')), decipher.final()]).toString('utf8');
+}

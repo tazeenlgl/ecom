@@ -4706,6 +4706,152 @@
         }
       }
     },
+    "/v1/admin/stores/{storeId}/payment-gateways/paytm": {
+      "get": {
+        "summary": "Paytm settings for the store (the merchant key is never returned)",
+        "tags": [
+          "Admin: payments"
+        ],
+        "description": "Requires permission `store.settings.manage` for the store in the path.",
+        "x-permission": "store.settings.manage",
+        "security": [
+          {
+            "adminBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "storeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "4XX": {
+            "description": "Client error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "summary": "Set Paytm MID, merchant key, website name, callback URL and environment. Omit merchantKey to keep the stored one",
+        "tags": [
+          "Admin: payments"
+        ],
+        "description": "Requires permission `store.settings.manage` for the store in the path.",
+        "x-permission": "store.settings.manage",
+        "security": [
+          {
+            "adminBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "storeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "merchantId": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9]{1,40}$"
+                  },
+                  "merchantKey": {
+                    "type": "string",
+                    "minLength": 16,
+                    "maxLength": 16
+                  },
+                  "websiteName": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_]{1,40}$"
+                  },
+                  "callbackUrl": {
+                    "type": "string",
+                    "maxLength": 500,
+                    "format": "uri"
+                  },
+                  "environment": {
+                    "type": "string",
+                    "enum": [
+                      "staging",
+                      "production"
+                    ]
+                  },
+                  "enabled": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "merchantId",
+                  "callbackUrl"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "4XX": {
+            "description": "Client error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/admin/stores/{storeId}/payments/reconcile": {
       "post": {
         "summary": "Queue reconciliation of stale pending payments",

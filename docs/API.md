@@ -1,6 +1,6 @@
 # API
 
-Status: **implemented**. The contract is generated from the route definitions into [openapi.json](openapi.json) (OpenAPI 3.1, 117 operations). It is also served by a running API at `GET /v1/openapi.json`. CI fails if `docs/openapi.json` is out of date: run `npm run openapi -w @ecom/api` after changing a route.
+Status: **implemented**. The contract is generated from the route definitions into [openapi.json](openapi.json) (OpenAPI 3.1, 119 operations). It is also served by a running API at `GET /v1/openapi.json`. CI fails if `docs/openapi.json` is out of date: run `npm run openapi -w @ecom/api` after changing a route.
 
 ## Surfaces
 
@@ -8,7 +8,7 @@ Status: **implemented**. The contract is generated from the route definitions in
 | --- | --- | --- |
 | `/v1/storefront/*` | Shoppers | The verified `Host` header ([TENANCY.md](TENANCY.md)). There is no store id in the URL or body |
 | `/v1/admin/*` | Staff and platform admins | `:storeId` in the path, authorized against the admin's role grants |
-| `/v1/webhooks/payments/:provider` | Payment providers | From the stored payment transaction the event refers to |
+| `/v1/webhooks/payments/:provider` | Payment providers (`fake`, `paytm`) | From the stored payment transaction the event refers to |
 | `/health/live`, `/health/ready` | Load balancers | None. `ready` checks the database |
 
 ## Conventions
@@ -173,6 +173,8 @@ Generated from `docs/openapi.json`. "Access" is the permission checked for the p
 | GET | `/v1/admin/stores/{storeId}/pages` | store.read | List pages, policies and FAQs |
 | POST | `/v1/admin/stores/{storeId}/pages` | content.write | Create a page, policy or FAQ entry |
 | PATCH | `/v1/admin/stores/{storeId}/pages/{id}` | content.write | Update a page |
+| GET | `/v1/admin/stores/{storeId}/payment-gateways/paytm` | store.settings.manage | Paytm settings for the store (the merchant key is never returned) |
+| PUT | `/v1/admin/stores/{storeId}/payment-gateways/paytm` | store.settings.manage | Set Paytm MID, merchant key, website name, callback URL and environment. Omit merchantKey to keep the stored one |
 | POST | `/v1/admin/stores/{storeId}/payments/reconcile` | refunds.manage | Queue reconciliation of stale pending payments |
 | GET | `/v1/admin/stores/{storeId}/pos/status` | pos.manage | POS adapter capabilities, stock freshness, unsynced orders and failed jobs |
 | POST | `/v1/admin/stores/{storeId}/pos/stock-sync` | pos.manage | Queue a stock refresh from the POS |

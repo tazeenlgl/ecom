@@ -9,6 +9,7 @@ Migrations live in `apps/api/drizzle/`, are recorded in `drizzle/meta/_journal.j
 | 0000 | `0000_init.sql` | generated | `brands`, `stores`, `store_domains`, `audit_logs` (foundation commit `a25e7c7`) |
 | 0001 | `0001_commerce_core.sql` | generated | 38 new tables and their enums, indexes and constraints. Adds columns `stores.config`, `stores.pos_location_ref` and `store_domains.verification_token`. **Additive only**: no drops, renames or type changes to `0000` objects |
 | 0002 | `0002_order_snapshots_immutable.sql` | hand-written | Trigger functions and triggers that make order snapshots immutable ([DATABASE.md](DATABASE.md#immutability)) |
+| 0003 | `0003_paytm_gateway_config.sql` | generated | `payment_gateway_configs`: per-store gateway credentials, with the key encrypted. Additive |
 
 Applied so far only to local and test databases. **No migration has been run against any shared or production database.**
 

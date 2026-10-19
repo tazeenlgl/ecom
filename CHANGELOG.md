@@ -2,6 +2,18 @@
 
 Dates are when the change was committed. Nothing has been deployed.
 
+## 2026-10-19: Paytm payment gateway (branch `claude/project-thread-4t2912`)
+
+Added:
+- A Paytm adapter (`modules/payments/paytm/`). It covers initiate transaction, checksum-verified server notifications, order status (used by reconciliation) and refund apply. It defaults to staging. **Status: partial.** It has not been run against Paytm staging yet; see `docs/PAYMENTS.md#paytm`.
+- Per-store Paytm settings, edited through `GET/PUT /v1/admin/stores/:storeId/payment-gateways/paytm` (`store.settings.manage`). The merchant key is encrypted with AES-256-GCM (`CONFIG_ENCRYPTION_KEY`) and never returned or logged.
+- Migration `0003_paytm_gateway_config`: one additive table, `payment_gateway_configs`.
+- New environment variables: `CONFIG_ENCRYPTION_KEY`, `PAYTM_STAGING_HOST`, `PAYTM_PRODUCTION_HOST` and `PAYTM_PRODUCTION_ENABLED`, which defaults to `false`.
+
+Changed:
+- The `PaymentProvider` methods now receive the store id, so credentials can differ per store.
+- `parseWebhook` may be async and may return `null` for a verified notification that carries no state change.
+
 ## 2026-10-19: Backend and database checkpoint (branch `claude/project-thread-4t2912`)
 
 Added:

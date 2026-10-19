@@ -16,6 +16,7 @@ import {
 } from 'drizzle-orm/pg-core';
 import { createdAt, timestamps } from './common.js';
 import { orders, returnRequests } from './orders.js';
+import { stores } from './tenancy.js';
 
 export const transactionStatus = pgEnum('payment_transaction_status', ['created', 'pending', 'succeeded', 'failed', 'cancelled']);
 
@@ -118,5 +119,32 @@ export const refunds = pgTable(
       foreignColumns: [returnRequests.storeId, returnRequests.id],
     }).onDelete('restrict'),
     check('refunds_amount_ck', sql`${t.amountPaise} > 0`),
+  ],
+);
+
+/**
+ * Per-store gateway credentials, edited by store admins. The merchant key is
+ * stored encrypted (AES-256-GCM, CONFIG_ENCRYPTION_KEY) and never returned by the API.
+ */
+export const paymentGatewayConfigs = pgTable(
+  'payment_gateway_configs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    storeId: uuid('store_id')
+      .notNull()
+      .references(() => stores.id, { onDelete: 'cascade' }),
+    provider: text('provider').notNull(),
+    enabled: boolean('enabled').notNull().default(false),
+    environment: text('environment').notNull().default('staging'),
+    merchantId: text('merchant_id').notNull(),
+    websiteName: text('website_name').notNull(),
+    callbackUrl: text('callback_url').notNull(),
+    merchantKeyEncrypted: text('merchant_key_encrypted').notNull(),
+    updatedBy: text('updated_by'),
+    ...timestamps,
+  },
+  (t) => [
+    uniqueIndex('payment_gateway_configs_store_provider_uq').on(t.storeId, t.provider),
+    check('payment_gateway_configs_environment_ck', sql`${t.environment} in ('staging', 'production')`),
   ],
 );

@@ -11,7 +11,7 @@ Start with [docs/INDEX.md](docs/INDEX.md).
 | Path | What it is |
 | --- | --- |
 | `apps/api` | Fastify + TypeScript API, Drizzle ORM, PostgreSQL. Storefront, admin and webhook endpoints, plus a background worker |
-| `apps/api/drizzle` | Versioned SQL migrations (`0000`–`0002`) |
+| `apps/api/drizzle` | Versioned SQL migrations (`0000`–`0003`) |
 | `apps/api/test` | Vitest suites against a real PostgreSQL database |
 | `docs/` | Knowledge base, architecture and generated `openapi.json` |
 

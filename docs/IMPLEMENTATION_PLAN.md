@@ -10,6 +10,7 @@ Status as of 2026-10-19. Each phase needs the user's approval before it starts.
 | Foundation | API service, brand, store and domain schema, host resolution, `PosGateway` port, CI | commit `a25e7c7` |
 | Backend and database | All modules in [ARCHITECTURE.md](ARCHITECTURE.md), migrations `0001` and `0002`, 117 API operations, worker | branch `claude/project-thread-4t2912`, [TESTING.md](TESTING.md) (97 tests) |
 | Knowledge base | `docs/`, `README.md`, `CLAUDE.md`, `CHANGELOG.md` | this folder |
+| Paytm adapter (partial) | Per-store encrypted credentials, initiate, notification, status, refund | [PAYMENTS.md](PAYMENTS.md#paytm). Needs a staging test with a real test MID and key |
 
 ## Next (proposed order)
 

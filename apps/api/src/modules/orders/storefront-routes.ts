@@ -5,6 +5,7 @@ import type { AppContext } from '../../context.js';
 import { orderEvents, orderItems, orders, paymentTransactions, returnRequests } from '../../db/schema.js';
 import { actorOf } from '../../lib/audit.js';
 import { AppError, notFound } from '../../lib/errors.js';
+import { providerForStore } from '../payments/service.js';
 import { cursorCondition, pageQuery, toPage } from '../../lib/pagination.js';
 import { RateLimiter } from '../../lib/rate-limit.js';
 import { defineRoute } from '../../lib/route.js';
@@ -91,10 +92,10 @@ export function orderStorefrontRoutes(ctx: AppContext) {
         params: orderParams,
       },
       async (request, { params }) => {
-        const providerName = ctx.config.PAYMENT_PROVIDER;
-        const provider = ctx.payments.get(providerName);
-        if (!provider) throw new AppError(503, 'payment_error', 'Online payment is not available right now.');
         const own = await findOwnOrder(request, params.orderNumber);
+        const provider = await providerForStore(ctx, own.storeId);
+        if (!provider) throw new AppError(503, 'payment_error', 'Online payment is not available right now.');
+        const providerName = provider.name;
 
         const txn = await ctx.db.transaction(async (tx) => {
           const order = await lockOrder(tx, own.storeId, own.id);
@@ -111,7 +112,7 @@ export function orderStorefrontRoutes(ctx: AppContext) {
         // Provider call outside the transaction (network I/O); the transaction row already exists.
         let result: Awaited<ReturnType<typeof provider.createPayment>>;
         try {
-          result = await provider.createPayment({ transactionId: txn.id, orderNumber: own.orderNumber, amountPaise: txn.amountPaise, currency: txn.currency });
+          result = await provider.createPayment({ storeId: own.storeId, customerRef: own.customerId, transactionId: txn.id, orderNumber: own.orderNumber, amountPaise: txn.amountPaise, currency: txn.currency });
         } catch (err) {
           request.log.error({ err, transactionId: txn.id }, 'payment initiation failed');
           await ctx.db.update(paymentTransactions).set({ status: 'failed', failureCode: 'initiation_failed' }).where(eq(paymentTransactions.id, txn.id));

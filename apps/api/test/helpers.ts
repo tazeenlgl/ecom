@@ -8,6 +8,9 @@ import { adminRoleAssignments, adminUsers, brands, storeDomains, stores } from '
 import { hashPassword } from '../src/lib/crypto.js';
 import { LogMessageSender } from '../src/modules/notifications/sender.js';
 import { FakePaymentProvider } from '../src/modules/payments/fake-provider.js';
+import { paytmConfigFromDb } from '../src/modules/payments/paytm/config.js';
+import { PaytmPaymentProvider } from '../src/modules/payments/paytm/provider.js';
+import type { PaymentProvider } from '../src/modules/payments/provider.js';
 import type { PosGateway } from '../src/modules/pos/gateway.js';
 import { UnconfiguredPosGateway } from '../src/modules/pos/unconfigured-gateway.js';
 
@@ -27,7 +30,7 @@ export class FakeDns {
  * External integrations are fakes: log-only messages, FakePaymentProvider,
  * FakeDns, and the given POS gateway (unconfigured by default).
  */
-export async function setupTestApp(options: { pos?: PosGateway } = {}) {
+export async function setupTestApp(options: { pos?: PosGateway; paytmFetch?: typeof fetch } = {}) {
   const { db, pool } = createDatabase(TEST_DATABASE_URL);
   await db.execute(sql`drop schema if exists public cascade; drop schema if exists drizzle cascade; create schema public;`);
   await migrate(db, { migrationsFolder });
@@ -36,12 +39,21 @@ export async function setupTestApp(options: { pos?: PosGateway } = {}) {
   const payment = new FakePaymentProvider(WEBHOOK_SECRET);
   const dns = new FakeDns();
   const clock = { offsetMs: 0 };
+  const config = testConfig({ PAYMENT_PROVIDER: 'fake', FAKE_PAYMENT_WEBHOOK_SECRET: WEBHOOK_SECRET });
+  // Paytm never reaches the network in tests: calls go to `paytmFetch` (or fail).
+  const noNetwork = (async () => {
+    throw new Error('network disabled in tests');
+  }) as typeof fetch;
+  const paytm = new PaytmPaymentProvider({ db, configFor: paytmConfigFromDb(db, config), fetch: options.paytmFetch ?? noNetwork });
   const app = await buildApp({
-    config: testConfig({ PAYMENT_PROVIDER: 'fake', FAKE_PAYMENT_WEBHOOK_SECRET: WEBHOOK_SECRET }),
+    config,
     db,
     overrides: {
       messages,
-      payments: new Map([['fake', payment]]),
+      payments: new Map<string, PaymentProvider>([
+        ['fake', payment],
+        ['paytm', paytm],
+      ]),
       dns,
       pos: options.pos ?? new UnconfiguredPosGateway(),
       now: () => new Date(Date.now() + clock.offsetMs),

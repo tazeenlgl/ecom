@@ -16,6 +16,10 @@ All configuration comes from the environment. It is validated at startup by `app
 | `SMS_PROVIDER` | no | `log` | `log` or `disabled` | `log` keeps codes in memory and is refused in production. `disabled` refuses to send. No live SMS adapter exists yet |
 | `PAYMENT_PROVIDER` | no | `none` | `none` or `fake` | `fake` moves no money and is refused in production. No live gateway adapter exists yet |
 | `FAKE_PAYMENT_WEBHOOK_SECRET` | when `PAYMENT_PROVIDER=fake` | — | Signs fake webhooks | At least 16 characters. Development and test only |
+| `CONFIG_ENCRYPTION_KEY` | in production | development value | Encrypts stored provider secrets (the Paytm merchant key) with AES-256-GCM | Secret. Base64 of 32 random bytes (`openssl rand -base64 32`). Production refuses the default. Changing it makes stored keys unreadable, so they must be re-entered |
+| `PAYTM_STAGING_HOST` | no | `https://securestage.paytmpayments.com` | Paytm staging API host | Confirm against Paytm's current docs |
+| `PAYTM_PRODUCTION_HOST` | no | `https://secure.paytmpayments.com` | Paytm production API host | Confirm against Paytm's current docs |
+| `PAYTM_PRODUCTION_ENABLED` | no | `false` | Allows stores to choose Paytm `production` | Live payments. Set `true` only with the owner's approval |
 | `POS_ADAPTER` | no | `none` | `none` only | The real POS API is unverified ([POS_INTEGRATION.md](POS_INTEGRATION.md)) |
 | `WORKER_POLL_INTERVAL_MS` | no | `2000` | Worker idle poll interval (≥ 100) | |
 

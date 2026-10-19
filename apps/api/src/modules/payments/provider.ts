@@ -29,14 +29,26 @@ export type ProviderPaymentStatus = { status: 'pending' | 'succeeded' | 'failed'
 export interface PaymentProvider {
   readonly name: string;
   createPayment(input: {
+    storeId: string;
     transactionId: string;
     orderNumber: string;
     amountPaise: number;
     currency: string;
+    /** Stable customer reference for the provider (the customer id). */
+    customerRef: string;
   }): Promise<{ providerRef: string; clientPayload: Record<string, unknown> }>;
-  parseWebhook(rawBody: Buffer, headers: Record<string, string | string[] | undefined>): VerifiedPaymentEvent;
-  fetchPaymentStatus(providerRef: string): Promise<ProviderPaymentStatus>;
-  createRefund(input: { refundId: string; paymentRef: string; amountPaise: number }): Promise<{ refundRef: string }>;
+  /**
+   * Verifies and normalises a webhook. Returns null for a verified notification
+   * that carries no state change (for example a "still pending" notice).
+   */
+  parseWebhook(
+    rawBody: Buffer,
+    headers: Record<string, string | string[] | undefined>,
+  ): VerifiedPaymentEvent | null | Promise<VerifiedPaymentEvent | null>;
+  fetchPaymentStatus(providerRef: string, storeId: string): Promise<ProviderPaymentStatus>;
+  createRefund(input: { storeId: string; refundId: string; paymentRef: string; amountPaise: number }): Promise<{ refundRef: string }>;
+  /** Whether this provider can take payments for the store (credentials present and enabled). */
+  isEnabledFor?(storeId: string): Promise<boolean>;
 }
 
 export class WebhookVerificationError extends Error {

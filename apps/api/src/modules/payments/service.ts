@@ -7,7 +7,7 @@ import { AppError } from '../../lib/errors.js';
 import { enqueueJob } from '../jobs/queue.js';
 import { addOrderEvent, lockOrder, notifyOrder, type Order, schedulePosSync, transitionOrder } from '../orders/service.js';
 import { canTransition } from '../orders/state-machines.js';
-import type { VerifiedPaymentEvent } from './provider.js';
+import type { PaymentProvider, VerifiedPaymentEvent } from './provider.js';
 
 const webhookActor: Actor = { type: 'webhook', id: null };
 
@@ -202,6 +202,18 @@ export async function createRefund(
   return refund!;
 }
 
+/**
+ * The provider that takes online payments for a store: a gateway the store has
+ * configured and enabled (Paytm), otherwise the deployment-wide PAYMENT_PROVIDER.
+ */
+export async function providerForStore(ctx: AppContext, storeId: string): Promise<PaymentProvider | undefined> {
+  for (const provider of ctx.payments.values()) {
+    if (provider.isEnabledFor && (await provider.isEnabledFor(storeId))) return provider;
+  }
+  const fallback = ctx.payments.get(ctx.config.PAYMENT_PROVIDER);
+  return fallback && !fallback.isEnabledFor ? fallback : undefined;
+}
+
 /** Job: send a pending online refund to its provider. */
 export async function processRefund(ctx: AppContext, storeId: string, refundId: string) {
   await ctx.db.transaction(async (tx) => {
@@ -214,7 +226,7 @@ export async function processRefund(ctx: AppContext, storeId: string, refundId: 
     if (!row || !['pending', 'failed'].includes(row.refund.status)) return;
     const provider = ctx.payments.get(row.txn.provider);
     if (!provider || !row.txn.providerRef) throw new Error(`Payment provider ${row.txn.provider} is not configured`);
-    const { refundRef } = await provider.createRefund({ refundId: row.refund.id, paymentRef: row.txn.providerRef, amountPaise: row.refund.amountPaise });
+    const { refundRef } = await provider.createRefund({ storeId, refundId: row.refund.id, paymentRef: row.txn.providerRef, amountPaise: row.refund.amountPaise });
     await tx.update(refunds).set({ status: 'processing', providerRef: refundRef }).where(eq(refunds.id, row.refund.id));
   });
 }
@@ -239,7 +251,7 @@ export async function reconcilePendingPayments(ctx: AppContext, storeId: string)
   for (const txn of stale) {
     const provider = ctx.payments.get(txn.provider);
     if (!provider || !txn.providerRef) continue;
-    const status = await provider.fetchPaymentStatus(txn.providerRef);
+    const status = await provider.fetchPaymentStatus(txn.providerRef, storeId);
     if (status.status === 'pending') continue;
     const outcome = await ingestPaymentEvent(
       ctx,

@@ -46,7 +46,8 @@ Run on 2026-10-19 in the development container (Node 22, PostgreSQL 16):
 | `test/commerce.test.ts` | 15 | Storefront catalogue; stock unknown vs zero; server pricing; cross-store cart isolation; stock issues; cart merge; coupons and stacking; idempotent COD checkout; snapshot immutability; order privacy; illegal transitions; shipping lifecycle with out-of-order events; POS submission retries, dead-lettering and admin retry |
 | `test/payments.test.ts` | 7 | Unsigned or tampered webhooks; success once, late failure ignored; amount mismatch; success after failure; unpaid expiry plus refund of a late payment; reconciliation; idempotent, capped refunds |
 | `test/database.test.ts` | 4 | Migration journal applies in order; composite tenant keys; payment event dedupe; job idempotency |
-| **Total** | **97 passed** | `Test Files 8 passed (8)`, `Tests 97 passed (97)`, about 15 s |
+| `test/paytm.test.ts` | 11 | Paytm checksum round trip and tampering; rupee/paise conversion; admin settings (key required once, never returned, encrypted at rest, kept on update, not in audit); production refused; permission and cross-store checks; signed initiate request; notification checksum, MID and amount checks; duplicates; reconciliation through order status; refund with Paytm's txn id; fallback when disabled. **Paytm itself is simulated** |
+| **Total** | **108 passed** | `Test Files 9 passed (9)`, `Tests 108 passed (108)` |
 
 Also verified on 2026-10-19:
 - `npm run typecheck` and `npm run build` pass.
@@ -54,7 +55,7 @@ Also verified on 2026-10-19:
 
 ## Not covered (yet)
 
-- **Real providers:** SMS, payment gateway, courier and POS. Contract tests are needed once each one is chosen ([POS_INTEGRATION.md](POS_INTEGRATION.md)).
+- **Real providers:** SMS, Paytm staging, courier and POS. Contract tests are needed once each one is chosen ([POS_INTEGRATION.md](POS_INTEGRATION.md)).
 - **Load and concurrency at scale.** Concurrent checkout with the same idempotency key is handled in code but has no dedicated stress test.
 - **The worker process loop** (`src/worker.ts`). Job handlers are tested through `runDueJobs` directly.
 - **Rate limits across several instances.** They are in-process; see [KNOWN_ISSUES.md](KNOWN_ISSUES.md).

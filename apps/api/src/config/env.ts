@@ -7,6 +7,8 @@ const booleanString = z
 
 // Development/test-only fallback. Production must set its own secret (enforced below).
 const DEV_OTP_SECRET = 'dev-only-otp-secret-change-me-0123456789';
+// Development/test-only key for encrypting stored provider credentials. Production must set its own.
+const DEV_CONFIG_ENCRYPTION_KEY = 'ZGV2LW9ubHktY29uZmlnLWtleS0zMi1ieXRlcyEhISE=';
 
 const envSchema = z
   .object({
@@ -28,12 +30,25 @@ const envSchema = z
     FAKE_PAYMENT_WEBHOOK_SECRET: z.string().min(16).optional(),
     POS_ADAPTER: z.enum(['none']).default('none'),
 
+    // Base64 of 32 random bytes. Encrypts per-store provider secrets such as the Paytm merchant key.
+    CONFIG_ENCRYPTION_KEY: z
+      .string()
+      .refine((v) => Buffer.from(v, 'base64').length === 32, 'must be base64 of 32 bytes')
+      .default(DEV_CONFIG_ENCRYPTION_KEY),
+    // Paytm hosts. Stores use staging unless production is enabled here AND chosen in the store's settings.
+    PAYTM_STAGING_HOST: z.url({ protocol: /^https$/ }).default('https://securestage.paytmpayments.com'),
+    PAYTM_PRODUCTION_HOST: z.url({ protocol: /^https$/ }).default('https://secure.paytmpayments.com'),
+    PAYTM_PRODUCTION_ENABLED: booleanString,
+
     WORKER_POLL_INTERVAL_MS: z.coerce.number().int().min(100).default(2000),
   })
   .superRefine((env, ctx) => {
     if (env.NODE_ENV !== 'production') return;
     if (env.OTP_HMAC_SECRET === DEV_OTP_SECRET) {
       ctx.addIssue({ code: 'custom', path: ['OTP_HMAC_SECRET'], message: 'must be set in production' });
+    }
+    if (env.CONFIG_ENCRYPTION_KEY === DEV_CONFIG_ENCRYPTION_KEY) {
+      ctx.addIssue({ code: 'custom', path: ['CONFIG_ENCRYPTION_KEY'], message: 'must be set in production' });
     }
     if (env.SMS_PROVIDER === 'log') {
       ctx.addIssue({ code: 'custom', path: ['SMS_PROVIDER'], message: '"log" is not allowed in production' });

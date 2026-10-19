@@ -21,6 +21,9 @@ import { orderAdminRoutes } from './modules/orders/admin-routes.js';
 import { orderStorefrontRoutes } from './modules/orders/storefront-routes.js';
 import { FakePaymentProvider } from './modules/payments/fake-provider.js';
 import type { PaymentProviders } from './modules/payments/provider.js';
+import { paytmAdminRoutes } from './modules/payments/paytm/admin-routes.js';
+import { paytmConfigFromDb } from './modules/payments/paytm/config.js';
+import { PaytmPaymentProvider } from './modules/payments/paytm/provider.js';
 import { paymentWebhookRoutes } from './modules/payments/webhook-routes.js';
 import { DnsDomainVerifier } from './modules/platform/domain-verifier.js';
 import { platformRoutes } from './modules/platform/routes.js';
@@ -54,6 +57,8 @@ export function createContext({ config, db, overrides = {} }: AppDeps, log: { in
   if (config.PAYMENT_PROVIDER === 'fake' && config.FAKE_PAYMENT_WEBHOOK_SECRET) {
     payments.set('fake', new FakePaymentProvider(config.FAKE_PAYMENT_WEBHOOK_SECRET));
   }
+  // Inert until a store saves and enables its own Paytm credentials (staging unless production is allowed).
+  payments.set('paytm', new PaytmPaymentProvider({ db, configFor: paytmConfigFromDb(db, config), fetch: globalThis.fetch }));
   return {
     config,
     db,
@@ -134,6 +139,7 @@ export async function buildApp(deps: AppDeps) {
       await admin.register(orderAdminRoutes(ctx));
       await admin.register(jobAdminRoutes(ctx));
       await admin.register(reportRoutes(ctx));
+      await admin.register(paytmAdminRoutes(ctx));
     },
     { prefix: '/v1/admin' },
   );

@@ -2,7 +2,8 @@
 
 Status:
 - **Provider-neutral design, webhook processing, refunds, COD and reconciliation:** implemented and tested with a **fake provider**.
-- **Real gateway:** **blocked** until one is chosen and approved. No live gateway, production credential or real transaction is used anywhere.
+- **Paytm adapter:** **partial**. Built and tested against a simulated Paytm API, with per-store credentials set by admins. It has **not** yet been run against Paytm staging, because no test MID or key was available. See [Paytm](#paytm).
+- **Live payments:** off. Production Paytm is refused unless the deployment sets `PAYTM_PRODUCTION_ENABLED=true`, which needs the owner's approval.
 
 Code: `apps/api/src/modules/payments/`. Tests: `apps/api/test/payments.test.ts`.
 
@@ -17,6 +18,50 @@ Code: `apps/api/src/modules/payments/`. Tests: `apps/api/test/payments.test.ts`.
 A real adapter (Razorpay, Cashfree, PayU or another) must be written against that provider's documented contract, in its own file. It is then registered in `createContext` (`src/app.ts`) and enabled by a new `PAYMENT_PROVIDER` value.
 
 `FakePaymentProvider` (`fake-provider.ts`) signs webhooks with HMAC-SHA256 in `x-fake-signature`, using `FAKE_PAYMENT_WEBHOOK_SECRET`. It moves no money. Configuration validation refuses `PAYMENT_PROVIDER=fake` in production.
+
+## Paytm
+
+Code: `apps/api/src/modules/payments/paytm/`. Tests: `apps/api/test/paytm.test.ts`.
+
+### Credentials per store (admin)
+
+Nothing is hard-coded. Each store's admin sets its own Paytm details:
+
+- `GET /v1/admin/stores/:storeId/payment-gateways/paytm` returns the settings, with `merchantKeySet: true` instead of the key.
+- `PUT /v1/admin/stores/:storeId/payment-gateways/paytm` takes `merchantId`, `merchantKey` (16 characters, write-only), `websiteName` (default `WEBSTAGING`), `callbackUrl` (https), `environment` (`staging` or `production`) and `enabled`. Leave `merchantKey` out to keep the stored key.
+
+Both need `store.settings.manage` for that store. The key is encrypted with AES-256-GCM using `CONFIG_ENCRYPTION_KEY` before it is stored in `payment_gateway_configs`. It is never returned, logged or written to the audit log; the audit row records only `merchantKeyChanged`.
+
+When a store has Paytm enabled, its online payments use Paytm. Otherwise they use the deployment-wide `PAYMENT_PROVIDER`.
+
+### Flow (Paytm JS Checkout)
+
+1. `POST /v1/storefront/orders/:orderNumber/payments` calls Paytm **Initiate Transaction** (`/theia/api/v1/initiateTransaction`) with the store's MID. Paytm's `orderId` is our payment transaction id. The response gives the browser `mid`, `orderId`, `txnToken`, `amount` and the checkout script URL. No secrets are included.
+2. The shopper pays in Paytm's checkout. The browser callback to `callbackUrl` is **not** proof of payment.
+3. Paytm posts a form-encoded notification to `POST /v1/webhooks/payments/paytm`. The handler:
+   - finds the store from `ORDERID`;
+   - checks that `MID` matches that store;
+   - verifies `CHECKSUMHASH` with that store's key.
+
+   Anything else is rejected with `400 webhook_invalid`. `TXN_SUCCESS` and `TXN_FAILURE` go through the normal event path. The amount is checked, and duplicates are dropped by `TXNID:STATUS`. `PENDING` changes nothing.
+4. **Reconciliation** uses Paytm **Order Status** (`/v3/order/status`).
+5. **Refunds** read Paytm's `txnId` from Order Status, then call **Refund Apply** (`/refund/apply`) with our refund id as `refId`.
+
+Requests are signed like Paytm's PaytmChecksum library: AES-128-CBC over `sha256(payload|salt)+salt`, in `checksum.ts`.
+
+### Not verified yet
+
+Everything above was written from Paytm's published API documentation and tested only against a simulated Paytm API. Before the first staging payment, confirm:
+
+- the hosts: `PAYTM_STAGING_HOST` defaults to `https://securestage.paytmpayments.com`;
+- the endpoint paths and response fields;
+- that the checksum matches Paytm's;
+- the notification field names.
+
+Also not built yet:
+
+- verifying the signature on Paytm's API *responses*;
+- a refund-status webhook or poll. Refunds stay `processing` after Paytm accepts them; see [KNOWN_ISSUES.md](KNOWN_ISSUES.md).
 
 ## Online payment flow
 

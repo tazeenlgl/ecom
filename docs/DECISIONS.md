@@ -97,6 +97,20 @@ Each record gives the context, the decision, its consequences and its status. Da
 - **Decision:** ports with an unconfigured default and test doubles only. Production refuses the development-only adapters.
 - **Status:** accepted. The POS remains blocked: remote access to the POS server was declined on 2026-10-19.
 
+## ADR-015: Paytm credentials per store, encrypted, set by admins (2026-10-19)
+
+- **Context:** the user asked for Paytm, with the MID and key editable by admins rather than hard-coded.
+- **Decision:**
+  - Store credentials in `payment_gateway_configs`, one row per store and provider.
+  - Encrypt the merchant key with AES-256-GCM, keyed by `CONFIG_ENCRYPTION_KEY`. The key is write-only through the API.
+  - Use Paytm's `orderId` = our transaction id, so a notification leads to its store, and so to the key that verifies it.
+  - Default to staging. Production is refused unless the deployment sets `PAYTM_PRODUCTION_ENABLED`.
+- **Consequences:**
+  - Each brand can use its own Paytm account.
+  - Losing or rotating `CONFIG_ENCRYPTION_KEY` means every stored key must be re-entered.
+  - Credentials live in the database, so database backups must be protected like secrets.
+- **Status:** accepted. The adapter itself is **partial**, because it has not yet been verified against Paytm staging.
+
 ## ADR-014: Immutable order snapshots enforced by database triggers (2026-10-19)
 
 - **Decision:** migration `0002` rejects updates and deletes on `order_items`, and changes to the snapshot and money columns of `orders`.

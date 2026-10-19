@@ -2,7 +2,7 @@
 
 PostgreSQL 16, accessed through Drizzle ORM. The schema source is `apps/api/src/db/schema/*.ts`, re-exported from `src/db/schema.ts`. Migrations are in `apps/api/drizzle/` ([MIGRATIONS.md](MIGRATIONS.md)). Relationships are drawn in [ER_DIAGRAM.md](ER_DIAGRAM.md).
 
-There are **42 tables**: 4 from `0000_init` and 38 from `0001_commerce_core`. Migration `0002_order_snapshots_immutable` adds triggers only.
+There are **43 tables**: 4 from `0000_init`, 38 from `0001_commerce_core` and 1 from `0003_paytm_gateway_config`. Migration `0002_order_snapshots_immutable` adds triggers only.
 
 ## Conventions
 
@@ -45,7 +45,7 @@ There are **42 tables**: 4 from `0000_init` and 38 from `0001_commerce_core`. Mi
 | Catalogue | `attribute_definitions`, `categories`, `size_charts`, `products`, `product_variants`, `product_categories`, `collections`, `collection_products`, `product_media` | per-store slugs and SKU codes, composite FKs, `tax_rate_bps` 0–10000 |
 | Pricing and promotions | `variant_prices`, `price_history`, `promotions`, `coupons`, `promotion_redemptions` | `price > 0`, `mrp >= price`, `ends_at > starts_at`, one redemption per promotion per order |
 | Cart and orders | `carts`, `cart_items`, `orders`, `order_items`, `order_events`, `return_requests` | one active cart per customer, quantity 1–100, `orders_idempotency_uq (store, customer, idempotency_key)`, `refunded <= total` |
-| Payments | `payment_transactions`, `payment_events`, `refunds` | unique `(provider, provider_ref)`, **at most one succeeded transaction per order** (partial unique index), unique `(provider, provider_event_id)`, unique `(store, refund idempotency_key)`, amounts > 0 |
+| Payments | `payment_transactions`, `payment_events`, `refunds`, `payment_gateway_configs` | unique `(provider, provider_ref)`, **at most one succeeded transaction per order** (partial unique index), unique `(provider, provider_event_id)`, unique `(store, refund idempotency_key)`, amounts > 0, one gateway config per `(store, provider)`, with `environment` either `staging` or `production` |
 | Shipping | `shipping_zones`, `shipments`, `shipment_events` | unique `(courier, tracking_number)`, unique `(shipment, external_event_id)` |
 | POS | `pos_stock_levels` | unique `(sku_code, location_ref)` |
 | Jobs | `jobs` | unique `idempotency_key` |
