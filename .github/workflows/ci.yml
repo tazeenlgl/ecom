@@ -32,3 +32,5 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+      # The OpenAPI document is generated from route definitions; fail if it was not regenerated.
+      - run: npm run openapi -w @ecom/api && git diff --exit-code docs/openapi.json
