@@ -1,6 +1,6 @@
 import { and, eq, isNotNull } from 'drizzle-orm';
 import type { Database } from '../../db/client.js';
-import { brands, storeDomains, stores } from '../../db/schema.js';
+import { brands, type StoreConfig, storeDomains, stores } from '../../db/schema.js';
 
 export type ResolvedStore = {
   id: string;
@@ -11,6 +11,8 @@ export type ResolvedStore = {
   locale: string;
   timezone: string;
   publicSettings: Record<string, unknown>;
+  config: StoreConfig;
+  posLocationRef: string | null;
   brand: { id: string; slug: string; name: string; status: 'active' | 'archived' };
   hostname: string;
 };
@@ -27,6 +29,8 @@ export async function findStoreByHostname(db: Database, hostname: string): Promi
       locale: stores.locale,
       timezone: stores.timezone,
       publicSettings: stores.publicSettings,
+      config: stores.config,
+      posLocationRef: stores.posLocationRef,
       brand: { id: brands.id, slug: brands.slug, name: brands.name, status: brands.status },
       hostname: storeDomains.hostname,
     })
