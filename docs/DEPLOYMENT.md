@@ -28,6 +28,24 @@ See the diagram in [ARCHITECTURE.md](ARCHITECTURE.md#deployment-topology-propose
 - Managed PostgreSQL 16 with automated backups and point-in-time recovery, in an Indian region for data residency (assumption: confirm the requirement).
 - Health checks: `GET /health/live` (process up) and `GET /health/ready` (database reachable). These need no store host.
 
+### TRUST_PROXY by environment
+
+The storefront server calls the API with its own address as `Host` and puts the shop's domain in `X-Forwarded-Host` (`apps/web/lib/server-api.ts`). The API reads that header only from peers named in `TRUST_PROXY`; otherwise it uses `Host`, finds no store and answers `404`. A wrong or missing value therefore stops the shop working. It never serves another store's data. The behaviour is covered by `apps/api/test/proxy.test.ts` and `apps/api/test/proxy-production.test.ts`.
+
+| Environment | `TRUST_PROXY` | Notes |
+| --- | --- | --- |
+| Development (everything on one machine) | `loopback`, or `true` | `true` trusts every caller and logs a warning. Never expose such an API on a network. |
+| Staging | The storefront and admin servers' addresses, as IPs or CIDR ranges | Same rules as production, so the proxy path is exercised before release. |
+| Production | The same list of addresses of the servers that call the API | `true` is refused at startup. A hop count (`1`-`8`) is accepted, but it trusts whoever connects directly, so use it only when the API is reachable through the proxy alone. Prefer the address list. |
+
+Not decided in this repository, to be confirmed before the first staging or production deploy:
+
+1. The addresses (or private network range) from which the storefront and admin servers connect to the API. None are assumed here.
+2. That the API listens only on a private address and is not reachable from the internet except through the proxy. This is required for the hop-count form and sensible for the list form.
+3. That the edge proxy **overwrites** `X-Forwarded-Host` and `X-Forwarded-For` instead of appending, and that the Next.js servers are reachable only through it. The storefront takes the shop's host from the incoming `X-Forwarded-Host` (or `Host`), so a client that reached it directly could ask for another store's pages.
+4. The number of proxies in front of the web servers, for `TRUSTED_PROXY_HOPS`.
+5. After deploying: one request through the real path for each brand domain (`GET /v1/storefront/store` returns that brand), and one request with an unknown host (expect `404`).
+
 ## Before the first production deploy
 
 1. Make the GitHub repository private ([KNOWN_ISSUES.md](KNOWN_ISSUES.md)).

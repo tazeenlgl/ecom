@@ -2,6 +2,15 @@
 
 Dates are when the change was committed. Nothing has been deployed.
 
+## 2026-11-05: PR #3 review corrections H1 and H2 (uncommitted)
+
+Changed:
+- Payment reconciliation moves a checked payment to the back of the queue with the database clock (`clock_timestamp()`, microseconds, like `created_at`) instead of a millisecond `new Date()`. Two rows handled in the same millisecond used to tie, and the random id decided their order, which failed `payment-safety.test.ts` in CI (reproduced locally in 4 of 12 runs). Which payments are selected, and the order (`updated_at`, then id), are unchanged.
+- The two reconciliation ordering tests no longer depend on ids or on other tests' rows: they isolate their own payments and compare with the queue order the database reports. New tests: a payment never checked is taken before one that keeps failing; a tie is broken by id; consecutive touches get distinct stamps.
+- New `apps/api/test/proxy-production.test.ts`: production-mode configuration (address list, hop count, default), store resolution through the headers the storefront server really sends, untrusted peers cannot choose the store, fail-closed 404 without `TRUST_PROXY`, and unsafe values refused at startup. One characterisation test records that a hop count trusts whoever connects directly.
+- `docs/DEPLOYMENT.md` now has "TRUST_PROXY by environment" and the list of facts to confirm before deploying. The stale advice in `apps/web/.env.example` and `apps/web/README.md` that the API must run with `TRUST_PROXY=true` was corrected.
+- No production behaviour of `TRUST_PROXY` changed in this step. The actual proxy topology and addresses are not known to this repository and remain to be confirmed.
+
 ## 2026-11-05: Payment safety, review fixes (uncommitted)
 
 Changed:
