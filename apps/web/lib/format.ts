@@ -1,9 +1,10 @@
-const inr = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2, minimumFractionDigits: 0 });
+const inrWhole = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 });
+const inrPaise = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-/** Money is integer paise everywhere in the API. */
+/** Money is integer paise everywhere in the API. Whole rupees show no decimals; otherwise always two (₹559.80). */
 export function money(paise: number | null | undefined) {
   if (paise === null || paise === undefined) return '';
-  return inr.format(paise / 100);
+  return (paise % 100 === 0 ? inrWhole : inrPaise).format(paise / 100);
 }
 
 export function percentOff(mrp: number | null | undefined, price: number | null | undefined) {

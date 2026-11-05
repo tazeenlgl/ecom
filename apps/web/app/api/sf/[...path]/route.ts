@@ -35,16 +35,18 @@ async function handle(request: NextRequest, { params }: { params: Promise<{ path
     }
   }
 
+  // Bodyless writes (logout, start payment) must reach the API with no body and no content type.
+  const rawBody = method === 'GET' || method === 'HEAD' ? '' : await request.text();
   const extra: Record<string, string> = {};
   const contentType = request.headers.get('content-type');
-  if (contentType) extra['content-type'] = contentType;
+  if (contentType && rawBody) extra['content-type'] = contentType;
   const idem = request.headers.get('idempotency-key');
   if (idem) extra['idempotency-key'] = idem;
 
   const upstream = await fetch(`${API_URL}/v1/storefront/${joined}${request.nextUrl.search}`, {
     method,
     headers: await upstreamHeaders(extra),
-    body: method === 'GET' || method === 'HEAD' ? undefined : await request.text(),
+    body: rawBody || undefined,
     cache: 'no-store',
   });
 

@@ -1,3 +1,5 @@
+// Only on /shop: a root loading boundary would stream before notFound()/redirect() run,
+// turning real 404s and sign-in redirects into 200 responses.
 export default function Loading() {
   return (
     <div className="container-x py-16" aria-busy="true" aria-label="Loading">
