@@ -28,7 +28,7 @@ Pick what the business needs from [KNOWN_ISSUES.md](KNOWN_ISSUES.md):
 - a development-only way to read OTPs locally, if approved.
 - **Acceptance:** each item has tests and updated docs.
 
-### 3. Storefront UI (not started by instruction)
+### 3. Storefront UI (built 2026-11-05 in `apps/web`; next: wishlist, reviews, facets once their endpoints exist)
 - **Scope:** product listing and detail, cart, OTP sign-in, address book, checkout with quote confirmation, order history and tracking, returns, and content pages. Driven by per-store configuration and content blocks.
 - **Depends on:** a CORS decision and a domain for a staging store.
 - **Acceptance:** works on mobile, fails safely when stock is unknown, never sends prices as authoritative, accessibility basics.

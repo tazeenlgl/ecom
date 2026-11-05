@@ -10,6 +10,7 @@ Start with [docs/INDEX.md](docs/INDEX.md).
 
 | Path | What it is |
 | --- | --- |
+| `apps/web` | Next.js storefront for all stores, with a BFF route that keeps tokens in httpOnly cookies. See [apps/web/README.md](apps/web/README.md) |
 | `apps/api` | Fastify + TypeScript API, Drizzle ORM, PostgreSQL. Storefront, admin and webhook endpoints, plus a background worker |
 | `apps/api/drizzle` | Versioned SQL migrations (`0000`–`0003`) |
 | `apps/api/test` | Vitest suites against a real PostgreSQL database |

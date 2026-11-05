@@ -37,7 +37,7 @@ Status key: **I** implemented · **P** partial · **PL** planned · **B** blocke
 | F29 | Content: brand config, homepage sections, navigation, banners and campaigns, pages, FAQs, policies, SEO | I | `modules/content`, `modules/platform/settings.ts` |
 | F30 | Reporting | P | Daily sales and top SKUs only |
 | F31 | Notifications (OTP, order, payment, shipping, return, refund) | P | Jobs and templates are named. Delivery is log-only |
-| F32 | Storefront and admin UIs | PL | Not started by instruction |
+| F32 | Storefront and admin UIs | P | Storefront built in `apps/web` (2026-11-05). Admin UI not started |
 
 ## Non-functional
 

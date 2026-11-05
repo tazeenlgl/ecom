@@ -27,7 +27,7 @@ Last reviewed 2026-10-19.
 10. **Exchanges** are recorded and approved, but no replacement order is created automatically. Staff ship the replacement manually.
 11. **Reports** are basic: daily sales and top SKUs, in the store's timezone (default `Asia/Kolkata`). There is no export.
 12. **Local customer sign-in.** OTPs are never logged, so a developer cannot complete OTP sign-in by hand against `npm run dev`. Possible fix: a development-only endpoint, refused in production, that returns the last code for a phone number. Not built without approval.
-13. **No CORS configuration** yet. The storefront UI will need an explicit origin allow-list per store domain.
+13. **No CORS configuration.** Not needed by the storefront: `apps/web` calls the API server-to-server through its BFF route. A browser-based admin UI on another origin would need an allow-list.
 14. **Admin accounts have no multi-factor authentication.**
 15. **The audit log has no request id or IP address.**
 16. **Tests not written** for the content and reports endpoints and the worker loop ([TESTING.md](TESTING.md#not-covered-yet)).
