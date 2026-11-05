@@ -1,8 +1,9 @@
-import { and, asc, desc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, ne, sql } from 'drizzle-orm';
 import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { AppContext } from '../../context.js';
+import type { Tx } from '../../db/client.js';
 import {
   orderEvents,
   orderItems,
@@ -34,6 +35,36 @@ const FULFILLMENT_FOR: Partial<Record<ShipmentStatus, 'packed' | 'shipped' | 'de
   delivery_failed: 'delivery_failed',
   rto_delivered: 'returned_to_origin',
 };
+
+/** True when the refund is paid back through an online provider (not a cash-on-delivery payout). */
+async function isOnlineRefund(tx: Tx, refund: typeof refunds.$inferSelect): Promise<boolean> {
+  if (!refund.paymentTransactionId) return false;
+  const [txn] = await tx.select({ provider: paymentTransactions.provider }).from(paymentTransactions).where(eq(paymentTransactions.id, refund.paymentTransactionId));
+  return Boolean(txn && txn.provider !== 'cod');
+}
+
+/** The staff member must enter the provider's refund id back, proving they opened this refund at the provider. */
+function requireProviderRefundId(refund: typeof refunds.$inferSelect, entered: string) {
+  if (!refund.providerRef || refund.providerRef.trim().toLowerCase() !== entered.trim().toLowerCase()) {
+    throw new AppError(422, 'invalid_request', "Enter this refund's provider refund id exactly as the provider shows it.", { field: 'reference' });
+  }
+}
+
+/** Confirming a refund must never take the order's refunded amount above what was collected. */
+async function assertWithinOrderTotal(tx: Tx, order: { id: string; totalPaise: number; refundedPaise: number }, refund: typeof refunds.$inferSelect) {
+  const [others] = await tx
+    .select({ total: sql<number>`coalesce(sum(${refunds.amountPaise}), 0)::int` })
+    .from(refunds)
+    .where(and(eq(refunds.orderId, order.id), inArray(refunds.status, ['pending', 'processing']), ne(refunds.id, refund.id)));
+  const would = order.refundedPaise + (others?.total ?? 0) + refund.amountPaise;
+  if (would > order.totalPaise) {
+    throw new AppError(409, 'conflict', 'Confirming this refund would refund more than the order total. Another refund has already been recorded for this money.', {
+      orderTotalPaise: order.totalPaise,
+      refundedPaise: order.refundedPaise,
+      otherInFlightPaise: others?.total ?? 0,
+    });
+  }
+}
 
 export function orderAdminRoutes(ctx: AppContext) {
   return async (app: FastifyInstance) => {
@@ -177,7 +208,7 @@ export function orderAdminRoutes(ctx: AppContext) {
       {
         method: 'POST',
         url: '/stores/:storeId/refunds/:id/mark-succeeded',
-        summary: 'Record a refund paid outside a provider (e.g. COD bank transfer)',
+        summary: 'Record a refund paid outside a provider (COD), or confirm an online refund the provider accepted (status processing) after checking it in the provider dashboard',
         tag: 'Admin: payments',
         auth: refundAuth,
         params: storeEntityParams,
@@ -187,15 +218,74 @@ export function orderAdminRoutes(ctx: AppContext) {
         ctx.db.transaction(async (tx) => {
           const [refund] = await tx.select().from(refunds).where(and(eq(refunds.storeId, params.storeId), eq(refunds.id, params.id))).for('update');
           if (!refund) throw notFound('Refund');
-          if (refund.paymentTransactionId) {
-            const [txn] = await tx.select().from(paymentTransactions).where(eq(paymentTransactions.id, refund.paymentTransactionId));
-            if (txn && txn.provider !== 'cod') throw new AppError(409, 'conflict', 'Online refunds are confirmed by the payment provider.');
+          const online = await isOnlineRefund(tx, refund);
+          // An online refund can be confirmed by hand only after the provider accepted it (it has the
+          // provider's refund id): while processing, or to correct a refund wrongly marked failed. One still
+          // pending is sent by the job, and confirming it here would record a refund that was never made.
+          const correction = online && refund.status === 'failed';
+          if (online && (!refund.providerRef || !['processing', 'failed'].includes(refund.status))) {
+            throw new AppError(409, 'conflict', 'An online refund can be confirmed by hand only after the provider has accepted it (status processing, or failed by mistake).');
           }
+          // The staff member must have opened this refund at the provider: its id has to be entered back.
+          if (online) requireProviderRefundId(refund, body.reference);
           assertTransition('refund', refund.status, 'succeeded');
-          await tx.update(refunds).set({ providerRef: body.reference }).where(eq(refunds.id, refund.id));
-          await markRefund(ctx, tx, refund, 'succeeded', actorOf(request));
-          await recordAudit(tx, { storeId: params.storeId, actor: actorOf(request), action: 'refund.manual_success', entityType: 'refund', entityId: refund.id, changes: { reference: body.reference } });
+          const order = await lockOrder(tx, refund.storeId, refund.orderId);
+          if (online) await assertWithinOrderTotal(tx, order, refund);
+          // COD: the staff reference becomes the refund reference. Online: keep the provider's own refund id.
+          if (!online) await tx.update(refunds).set({ providerRef: body.reference }).where(eq(refunds.id, refund.id));
+          await markRefund(ctx, tx, refund, 'succeeded', actorOf(request), undefined, { reference: body.reference.trim(), note: correction ? 'Corrected from failed after checking the provider dashboard.' : online ? 'Confirmed after checking the provider dashboard.' : 'Paid outside the provider.' });
+          await addOrderEvent(tx, order, {
+            machine: 'refund',
+            actor: actorOf(request),
+            note: !online
+              ? 'Refund recorded as paid outside the provider.'
+              : correction
+                ? 'A refund marked failed was corrected to paid by staff after checking the provider dashboard.'
+                : 'Refund confirmed as paid by staff after checking the provider dashboard.',
+          });
+          await recordAudit(tx, {
+            storeId: params.storeId,
+            actor: actorOf(request),
+            action: correction ? 'refund.manual_correction' : 'refund.manual_success',
+            entityType: 'refund',
+            entityId: refund.id,
+            changes: { reference: body.reference, online, fromStatus: refund.status, providerRef: refund.providerRef, amountPaise: refund.amountPaise },
+          });
           return { refundId: refund.id, status: 'succeeded' };
+        }),
+    );
+
+    defineRoute(
+      app,
+      {
+        method: 'POST',
+        url: '/stores/:storeId/refunds/:id/mark-failed',
+        summary: 'Record that an online refund the provider accepted (status processing) did not complete, after checking it in the provider dashboard. Frees the amount for a new refund',
+        tag: 'Admin: payments',
+        auth: refundAuth,
+        params: storeEntityParams,
+        body: z.object({ reference: z.string().min(1).max(200), reason: z.string().trim().min(10).max(190) }),
+      },
+      async (request, { params, body }) =>
+        ctx.db.transaction(async (tx) => {
+          const [refund] = await tx.select().from(refunds).where(and(eq(refunds.storeId, params.storeId), eq(refunds.id, params.id))).for('update');
+          if (!refund) throw notFound('Refund');
+          if (!(await isOnlineRefund(tx, refund)) || refund.status !== 'processing' || !refund.providerRef) {
+            throw new AppError(409, 'conflict', 'Only an online refund in status processing can be marked failed by hand.');
+          }
+          requireProviderRefundId(refund, body.reference);
+          // The settlement columns record who did this and why. The amount stays held for a day in createRefund,
+          // so a mistaken failure can be corrected (mark-succeeded) before the same money is refunded again.
+          await markRefund(ctx, tx, refund, 'failed', actorOf(request), 'manual_failure', { reference: body.reference.trim(), note: body.reason });
+          await recordAudit(tx, {
+            storeId: params.storeId,
+            actor: actorOf(request),
+            action: 'refund.manual_failure',
+            entityType: 'refund',
+            entityId: refund.id,
+            changes: { reference: body.reference, reason: body.reason, fromStatus: refund.status, providerRef: refund.providerRef, amountPaise: refund.amountPaise },
+          });
+          return { refundId: refund.id, status: 'failed' };
         }),
     );
 

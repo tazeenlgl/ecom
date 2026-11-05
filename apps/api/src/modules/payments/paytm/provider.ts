@@ -122,6 +122,8 @@ export class PaytmPaymentProvider implements PaymentProvider {
     // Unknown orders are rejected rather than stored: without the store we cannot verify the checksum.
     if (!txn) throw new WebhookVerificationError('Unknown ORDERID');
     const config = await this.deps.configFor(txn.storeId);
+    // A staging notification must never confirm an order in a production deployment.
+    if (config?.blockedReason === 'staging_in_production') throw new WebhookVerificationError('Paytm staging is not accepted in production');
     if (!config || fields.MID !== config.merchantId || !verifySignature(paramsToString(fields), config.merchantKey, checksum)) {
       throw new WebhookVerificationError();
     }

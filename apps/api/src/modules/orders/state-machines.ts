@@ -71,7 +71,8 @@ export const MACHINES = {
     // A late success after a failure is accepted: the provider is the source of truth.
     failed: ['succeeded'],
     succeeded: [],
-    cancelled: [],
+    // An abandoned attempt closed by reconciliation can still be paid later; that money is recorded and refunded.
+    cancelled: ['succeeded'],
   },
 } as const;
 

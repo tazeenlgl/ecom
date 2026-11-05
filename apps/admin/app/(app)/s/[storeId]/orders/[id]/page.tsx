@@ -21,7 +21,7 @@ type Order = {
 type Item = { id: string; productTitle: string; variantTitle: string; skuCode: string; quantity: number; unitPricePaise: number; discountPaise: number; lineTotalPaise: number };
 type EventRow = { id: string; machine: string; fromState: string | null; toState: string | null; actorType: string; note: string | null; isPublic: boolean; createdAt: string };
 type Payment = { id: string; provider: string; providerRef: string | null; status: string; amountPaise: number; createdAt: string };
-type Refund = { id: string; amountPaise: number; reason: string; status: string; createdAt: string };
+type Refund = { id: string; paymentTransactionId: string | null; providerRef: string | null; settlementSource: 'provider' | 'manual' | null; settledByType: string | null; settledAt: string | null; settlementReference: string | null; settlementNote: string | null; amountPaise: number; reason: string; status: string; createdAt: string };
 type Shipment = { id: string; status: string; courier: string | null; trackingNumber: string | null; trackingUrl: string | null; createdAt: string };
 type ReturnReq = { id: string; type: 'return' | 'exchange'; status: string; reason: string; resolutionNote: string | null; createdAt: string };
 type Detail = { order: Order; items: Item[]; timeline: EventRow[]; payments: Payment[]; refunds: Refund[]; shipments: Shipment[]; returns: ReturnReq[] };
@@ -129,7 +129,7 @@ export default function OrderDetailPage() {
             {data.refunds.length > 0 && (
               <div className="mt-4 border-t border-line pt-3">
                 <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted">Refunds</p>
-                <ul className="space-y-2 text-sm">{data.refunds.map((r) => <RefundRow key={r.id} refund={r} canManage={can('refunds.manage')} onChange={reload} />)}</ul>
+                <ul className="space-y-2 text-sm">{data.refunds.map((r) => <RefundRow key={r.id} refund={r} online={data.payments.some((p) => p.id === r.paymentTransactionId && p.provider !== 'cod')} canManage={can('refunds.manage')} onChange={reload} />)}</ul>
               </div>
             )}
           </Card>
@@ -327,24 +327,70 @@ function RefundModal({ order, onClose, onDone }: { order: Order; onClose: () => 
   );
 }
 
-function RefundRow({ refund, canManage, onChange }: { refund: Refund; canManage: boolean; onChange: () => Promise<void> }) {
+function RefundRow({ refund, online, canManage, onChange }: { refund: Refund; online: boolean; canManage: boolean; onChange: () => Promise<void> }) {
   const { s } = useStore();
   const toast = useToast();
+  const [mode, setMode] = useState<'paid' | 'failed' | null>(null);
   const [ref, setRef] = useState('');
-  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  // COD refunds are paid by hand. An online refund is sent by the system. Once the provider has accepted it
+  // (processing) staff settle it by hand after checking the provider dashboard; a refund wrongly marked failed
+  // can be corrected to paid. The provider's refund id must be entered back, so the right refund was opened.
+  const accepted = online && Boolean(refund.providerRef);
+  const canPay = canManage && (online ? accepted && ['processing', 'failed'].includes(refund.status) : ['pending', 'failed', 'manual_required'].includes(refund.status));
+  const canFail = canManage && online && accepted && refund.status === 'processing';
+  const close = () => { setMode(null); setRef(''); setReason(''); setError(null); };
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!mode || !ref.trim() || (mode === 'failed' && reason.trim().length < 10)) return;
+    setBusy(true);
+    setError(null);
+    try {
+      if (mode === 'paid') await api(s(`refunds/${refund.id}/mark-succeeded`), { method: 'POST', body: { reference: ref.trim() } });
+      else await api(s(`refunds/${refund.id}/mark-failed`), { method: 'POST', body: { reference: ref.trim(), reason: reason.trim() } });
+      toast('ok', mode === 'paid' ? 'Refund recorded as paid.' : 'Refund recorded as failed.');
+      await onChange();
+    } catch (err) {
+      setError(errorText(err));
+      setBusy(false);
+    }
+  };
   return (
     <li>
       <div className="flex justify-between gap-2"><span>{money(refund.amountPaise)} <Badge tone={statusTone(refund.status)}>{humanize(refund.status)}</Badge></span><span className="text-xs text-muted">{dateTime(refund.createdAt)}</span></div>
       <p className="text-xs text-muted">{refund.reason}</p>
-      {canManage && ['pending', 'failed', 'manual_required'].includes(refund.status) && (
-        open ? (
-          <form className="mt-2 flex gap-2" onSubmit={async (e) => { e.preventDefault(); if (!ref.trim()) return; setBusy(true); try { await api(s(`refunds/${refund.id}/mark-succeeded`), { method: 'POST', body: { reference: ref.trim() } }); toast('ok', 'Refund recorded as paid.'); await onChange(); } catch (err) { toast('error', errorText(err)); setBusy(false); } }}>
-            <label className="sr-only" htmlFor={`rf-${refund.id}`}>Payment reference</label>
-            <input id={`rf-${refund.id}`} className="field py-1.5" placeholder="Reference (e.g. UPI txn id)" value={ref} onChange={(e) => setRef(e.target.value)} />
-            <button className="btn-secondary" disabled={busy}>Save</button>
+      {refund.settlementSource === 'manual' && <p className="text-xs text-muted">Recorded by staff{refund.settledAt ? ` on ${dateTime(refund.settledAt)}` : ''}{refund.settlementReference ? `, reference ${refund.settlementReference}` : ''}{refund.settlementNote ? `: ${refund.settlementNote}` : ''}</p>}
+      {refund.settlementSource === 'provider' && <p className="text-xs text-muted">Confirmed by the payment provider{refund.settledAt ? ` on ${dateTime(refund.settledAt)}` : ''}.</p>}
+      {accepted && <p className="text-xs text-muted">Provider refund id: <span className="font-mono">{refund.providerRef}</span></p>}
+      {accepted && refund.status === 'processing' && <p className="text-xs text-muted">Accepted by the payment provider; the final result is not reported automatically. Check it in the Paytm dashboard, then record it here.</p>}
+      {accepted && refund.status === 'failed' && <p className="text-xs text-muted">If this was marked failed by mistake and Paytm shows it as refunded, correct it below. The amount stays held for 24 hours after a failure.</p>}
+      {(canPay || canFail) && (
+        mode ? (
+          <form className="mt-2 space-y-2" onSubmit={submit}>
+            <div>
+              <label className="label" htmlFor={`rf-${refund.id}`}>{online ? 'Provider refund id (as shown in the Paytm dashboard)' : 'Payment reference (e.g. UPI txn id)'}</label>
+              <input id={`rf-${refund.id}`} className="field py-1.5" value={ref} onChange={(e) => setRef(e.target.value)} aria-invalid={error ? true : undefined} />
+            </div>
+            {mode === 'failed' && (
+              <div>
+                <label className="label" htmlFor={`rr-${refund.id}`}>Why it failed (at least 10 characters)</label>
+                <input id={`rr-${refund.id}`} className="field py-1.5" value={reason} onChange={(e) => setReason(e.target.value)} />
+              </div>
+            )}
+            {error && <p className="text-xs text-danger" role="alert">{error}</p>}
+            <div className="flex gap-2">
+              <button className="btn-secondary" disabled={busy}>{busy ? 'Saving…' : mode === 'paid' ? 'Record as paid' : 'Record as failed'}</button>
+              <button type="button" className="btn-ghost" disabled={busy} onClick={close}>Cancel</button>
+            </div>
           </form>
-        ) : <button className="btn-ghost mt-1 text-xs" onClick={() => setOpen(true)}>Record as paid outside the provider</button>
+        ) : (
+          <div className="mt-1 flex gap-2">
+            {canPay && <button className="btn-ghost text-xs" onClick={() => setMode('paid')}>{!online ? 'Record as paid outside the provider' : refund.status === 'failed' ? 'Correct: refund was paid' : 'Confirm refund was paid'}</button>}
+            {canFail && <button className="btn-ghost text-xs" onClick={() => setMode('failed')}>Mark refund failed</button>}
+          </div>
+        )
       )}
     </li>
   );

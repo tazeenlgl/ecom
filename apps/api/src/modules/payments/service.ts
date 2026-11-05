@@ -1,11 +1,11 @@
-import { and, eq, inArray, lt, ne, sql } from 'drizzle-orm';
+import { and, asc, eq, gt, inArray, lt, ne, or, sql } from 'drizzle-orm';
 import type { AppContext } from '../../context.js';
 import type { Tx } from '../../db/client.js';
-import { orders, paymentEvents, paymentTransactions, refunds } from '../../db/schema.js';
-import type { Actor } from '../../lib/audit.js';
+import { orders, paymentEvents, paymentTransactions, refunds, stores } from '../../db/schema.js';
+import { type Actor, systemActor } from '../../lib/audit.js';
 import { AppError } from '../../lib/errors.js';
 import { enqueueJob } from '../jobs/queue.js';
-import { addOrderEvent, lockOrder, notifyOrder, type Order, schedulePosSync, transitionOrder } from '../orders/service.js';
+import { addOrderEvent, cancelOrder, lockOrder, notifyOrder, type Order, schedulePosSync, transitionOrder } from '../orders/service.js';
 import { canTransition } from '../orders/state-machines.js';
 import type { PaymentProvider, VerifiedPaymentEvent } from './provider.js';
 
@@ -18,6 +18,7 @@ export type EventOutcome =
   | 'amount_mismatch'
   | 'unknown_reference'
   | 'paid_after_cancel'
+  | 'paid_after_expiry'
   | 'duplicate_payment';
 
 /**
@@ -102,11 +103,24 @@ async function applyPaymentEvent(ctx: AppContext, tx: Tx, provider: string, even
     return { outcome: 'paid_after_cancel', ...ids };
   }
   if (order.status === 'pending_payment') {
+    if (await paymentWindowClosed(ctx, tx, order)) {
+      // The unpaid-order window has passed but the expiry job has not cancelled the order yet.
+      // Do not confirm it: cancel it now, which also queues a full refund of the money received.
+      await cancelOrder(ctx, tx, order, webhookActor, 'Payment received after the payment window closed');
+      return { outcome: 'paid_after_expiry', ...ids };
+    }
     order = await transitionOrder(tx, order, 'order', 'confirmed', webhookActor, { isPublic: true });
     await schedulePosSync(ctx, tx, order, webhookActor);
     await notifyOrder(tx, order, 'order.confirmed');
   }
   return { outcome: 'applied', ...ids };
+}
+
+/** True when an unpaid order is older than its store's payment window (`unpaidOrderTtlMinutes`, default 30). */
+async function paymentWindowClosed(ctx: AppContext, tx: Tx, order: Order): Promise<boolean> {
+  const [store] = await tx.select({ config: stores.config }).from(stores).where(eq(stores.id, order.storeId));
+  const ttlMinutes = store?.config.unpaidOrderTtlMinutes ?? 30;
+  return ctx.now().getTime() > order.placedAt.getTime() + ttlMinutes * 60_000;
 }
 
 async function applyRefundEvent(ctx: AppContext, tx: Tx, provider: string, event: VerifiedPaymentEvent): Promise<ApplyResult> {
@@ -121,11 +135,16 @@ async function applyRefundEvent(ctx: AppContext, tx: Tx, provider: string, event
   const ids = { storeId: refund.storeId, transactionId: refund.paymentTransactionId ?? undefined };
   const to = event.type === 'refund.succeeded' ? 'succeeded' : 'failed';
   if (!canTransition('refund', refund.status, to)) return { outcome: 'ignored_stale', ...ids };
-  await markRefund(ctx, tx, refund, to, webhookActor, event.failureCode);
+  await markRefund(ctx, tx, refund, to, webhookActor, event.failureCode, { reference: event.eventId });
   return { outcome: 'applied', ...ids };
 }
 
-/** Sets a refund's final state and, on success, the order's refunded amount and payment status. */
+/**
+ * Sets a refund's final state and, on success, the order's refunded amount and payment status.
+ * Records how it was settled: `provider` for a provider event, `manual` when a staff member recorded it
+ * (with the reference they entered and a note). A later correction replaces the settlement; the earlier one
+ * stays in the order timeline and the audit log.
+ */
 export async function markRefund(
   ctx: AppContext,
   tx: Tx,
@@ -133,8 +152,21 @@ export async function markRefund(
   to: 'succeeded' | 'failed',
   actor: Actor,
   failureCode?: string,
+  settlement: { reference?: string; note?: string } = {},
 ) {
-  await tx.update(refunds).set({ status: to, failureCode: failureCode ?? null }).where(eq(refunds.id, refund.id));
+  await tx
+    .update(refunds)
+    .set({
+      status: to,
+      failureCode: failureCode ?? null,
+      settlementSource: actor.type === 'admin' ? 'manual' : 'provider',
+      settledByType: actor.type,
+      settledById: actor.id,
+      settledAt: ctx.now(),
+      settlementReference: settlement.reference ?? null,
+      settlementNote: settlement.note ?? null,
+    })
+    .where(eq(refunds.id, refund.id));
   const order = await lockOrder(tx, refund.storeId, refund.orderId);
   if (to === 'failed') {
     await addOrderEvent(tx, order, { machine: 'refund', from: refund.status, to, actor, note: failureCode ?? 'Refund failed' });
@@ -170,13 +202,22 @@ export async function createRefund(
   if (!['paid', 'partially_refunded', 'cod_collected'].includes(order.paymentStatus)) {
     throw new AppError(409, 'invalid_transition', 'Only collected payments can be refunded.');
   }
-  const [inFlight] = await tx
-    .select({ total: sql<number>`coalesce(sum(${refunds.amountPaise}), 0)::int` })
+  // Money in flight, plus money from an accepted refund that failed very recently. The second is held for a
+  // day: if a person marked it failed by mistake, the same money must not be refunded again before that can
+  // be corrected (mark-succeeded). A refund that failed without the provider ever accepting it is not held.
+  const holdCutoff = new Date(ctx.now().getTime() - FAILED_REFUND_HOLD_MS).toISOString();
+  const [reserved] = await tx
+    .select({
+      inFlight: sql<number>`coalesce(sum(${refunds.amountPaise}) filter (where ${refunds.status} in ('pending', 'processing')), 0)::int`,
+      held: sql<number>`coalesce(sum(${refunds.amountPaise}) filter (where ${refunds.status} = 'failed' and ${refunds.providerRef} is not null and coalesce(${refunds.settledAt}, ${refunds.updatedAt}) > ${holdCutoff}::timestamptz), 0)::int`,
+    })
     .from(refunds)
-    .where(and(eq(refunds.orderId, order.id), inArray(refunds.status, ['pending', 'processing'])));
-  const refundable = order.totalPaise - order.refundedPaise - (inFlight?.total ?? 0);
+    .where(eq(refunds.orderId, order.id));
+  const held = reserved?.held ?? 0;
+  const refundable = order.totalPaise - order.refundedPaise - (reserved?.inFlight ?? 0) - held;
   if (input.amountPaise <= 0 || input.amountPaise > refundable) {
-    throw new AppError(422, 'invalid_request', `The refundable amount is ${refundable} paise.`, { refundablePaise: refundable });
+    const why = held > 0 ? ` ${held} paise from a refund that failed in the last 24 hours is still held, in case it was marked failed by mistake.` : '';
+    throw new AppError(422, 'invalid_request', `The refundable amount is ${refundable} paise.${why}`, { refundablePaise: refundable, heldPaise: held });
   }
   const [txn] = await tx
     .select()
@@ -231,9 +272,28 @@ export async function processRefund(ctx: AppContext, storeId: string, refundId: 
   });
 }
 
+/** Pending payments are checked with the provider only after this long. */
+const RECONCILE_AFTER_MS = 15 * 60_000;
+/** How long the amount of a recently failed, provider-accepted refund stays unavailable for a new refund. */
+const FAILED_REFUND_HOLD_MS = 24 * 60 * 60_000;
+/** How long after its creation an abandoned attempt is still checked with the provider. */
+const ABANDONED_RECHECK_MS = 48 * 60 * 60_000;
+
 /**
  * Job: ask providers about payments still pending after 15 minutes, so a lost
  * webhook does not leave an order stuck. Results go through the same event path.
+ *
+ * - Oldest-checked first (`updated_at`, then id), and every row that stays
+ *   pending is touched, so a payment the provider keeps failing on cannot
+ *   starve the others in a later run.
+ * - One provider failure is recorded and skipped; the rest of the batch still
+ *   runs. The job throws at the end when anything failed, so it is retried and,
+ *   if it keeps failing, shows up as a failed job. Every step is idempotent.
+ * - A payment still unconfirmed after its order was cancelled is closed as
+ *   `cancelled` (abandoned). It is still checked for 48 hours after creation:
+ *   a success then goes through the normal late-payment path (recorded and
+ *   refunded in full), so a lost webhook cannot leave the customer charged
+ *   with no refund.
  */
 export async function reconcilePendingPayments(ctx: AppContext, storeId: string) {
   const stale = await ctx.db
@@ -242,31 +302,76 @@ export async function reconcilePendingPayments(ctx: AppContext, storeId: string)
     .where(
       and(
         eq(paymentTransactions.storeId, storeId),
-        eq(paymentTransactions.status, 'pending'),
-        lt(paymentTransactions.createdAt, new Date(ctx.now().getTime() - 15 * 60_000)),
+        lt(paymentTransactions.createdAt, new Date(ctx.now().getTime() - RECONCILE_AFTER_MS)),
+        or(
+          eq(paymentTransactions.status, 'pending'),
+          // An abandoned attempt can still be paid at the provider (a customer finishing at the bank
+          // after the order expired). Keep asking for a bounded time, so a lost webhook cannot hide it.
+          and(
+            eq(paymentTransactions.status, 'cancelled'),
+            eq(paymentTransactions.failureCode, 'abandoned'),
+            gt(paymentTransactions.createdAt, new Date(ctx.now().getTime() - ABANDONED_RECHECK_MS)),
+          ),
+        ),
       ),
     )
+    .orderBy(asc(paymentTransactions.updatedAt), asc(paymentTransactions.id))
     .limit(100);
   let applied = 0;
+  let abandoned = 0;
+  const failures: { transactionId: string; message: string }[] = [];
   for (const txn of stale) {
-    const provider = ctx.payments.get(txn.provider);
-    if (!provider || !txn.providerRef) continue;
-    const status = await provider.fetchPaymentStatus(txn.providerRef, storeId);
-    if (status.status === 'pending') continue;
-    const outcome = await ingestPaymentEvent(
-      ctx,
-      txn.provider,
-      {
-        eventId: `reconcile:${txn.id}:${status.status}`,
-        type: status.status === 'succeeded' ? 'payment.succeeded' : 'payment.failed',
-        providerRef: txn.providerRef,
-        amountPaise: status.amountPaise,
-        occurredAt: null,
-        payload: { source: 'reconciliation', status: status.status },
-      },
-      false,
-    );
-    if (outcome === 'applied') applied += 1;
+    try {
+      const provider = ctx.payments.get(txn.provider);
+      if (!provider || !txn.providerRef) continue;
+      const status = await provider.fetchPaymentStatus(txn.providerRef, storeId);
+      if (status.status === 'pending') {
+        if (await abandonIfOrderCancelled(ctx, txn.id)) abandoned += 1;
+        continue;
+      }
+      const outcome = await ingestPaymentEvent(
+        ctx,
+        txn.provider,
+        {
+          eventId: `reconcile:${txn.id}:${status.status}`,
+          type: status.status === 'succeeded' ? 'payment.succeeded' : 'payment.failed',
+          providerRef: txn.providerRef,
+          amountPaise: status.amountPaise,
+          occurredAt: null,
+          payload: { source: 'reconciliation', status: status.status },
+        },
+        false,
+      );
+      if (outcome === 'applied') applied += 1;
+    } catch (err) {
+      failures.push({ transactionId: txn.id, message: err instanceof Error ? err.message : 'unknown error' });
+    } finally {
+      // Rotate the row to the back of the queue whatever happened (a no-op once it is resolved).
+      await ctx.db.update(paymentTransactions).set({ updatedAt: new Date() }).where(eq(paymentTransactions.id, txn.id)).catch(() => undefined);
+    }
   }
-  return { checked: stale.length, applied };
+  if (failures.length > 0) {
+    const sample = failures.slice(0, 3).map((f) => `${f.transactionId}: ${f.message}`).join('; ');
+    throw new Error(`Reconciliation checked ${stale.length}, applied ${applied}, abandoned ${abandoned}, failed ${failures.length} (${sample})`);
+  }
+  return { checked: stale.length, applied, abandoned, failed: 0 };
+}
+
+/**
+ * Closes a still-pending transaction whose order has been cancelled (for
+ * example the unpaid order expired) and which the provider does not report as
+ * paid. The conditional update loses to a concurrent webhook, so a payment that
+ * lands meanwhile is never overwritten. A success that arrives later is still
+ * recorded and refunded by `applyPaymentEvent`.
+ */
+async function abandonIfOrderCancelled(ctx: AppContext, transactionId: string): Promise<boolean> {
+  return ctx.db.transaction(async (tx) => {
+    const [txn] = await tx.select().from(paymentTransactions).where(eq(paymentTransactions.id, transactionId)).for('update');
+    if (!txn || txn.status !== 'pending') return false;
+    const order = await lockOrder(tx, txn.storeId, txn.orderId);
+    if (order.status !== 'cancelled') return false;
+    await tx.update(paymentTransactions).set({ status: 'cancelled', failureCode: 'abandoned' }).where(eq(paymentTransactions.id, txn.id));
+    await addOrderEvent(tx, order, { machine: 'payment', actor: systemActor, note: 'Payment attempt closed: the order was cancelled before the provider confirmed any payment.' });
+    return true;
+  });
 }

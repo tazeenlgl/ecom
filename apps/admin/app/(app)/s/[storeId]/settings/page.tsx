@@ -154,13 +154,16 @@ function Domains() {
 
 function Payments() {
   const { s, can } = useStore();
-  const { data, error } = useFetch<{ paytm: { configured: boolean; enabled: boolean; merchantKeySet: boolean; mid?: string | null } }>(can('store.settings.manage') ? s('payment-gateways/paytm') : null);
+  const { data, error } = useFetch<{ paytm: { configured: boolean; enabled: boolean; merchantKeySet: boolean; merchantId?: string | null; environment?: string; blockedReason?: 'staging_in_production' | 'production_not_enabled' | null } }>(can('store.settings.manage') ? s('payment-gateways/paytm') : null);
   return (
     <Card title="Payment gateway (Paytm)">
       {!can('store.settings.manage') ? <p className="text-sm text-muted">Payment settings need the store settings permission.</p> : error ? <ErrorNote message={error} /> : !data ? <Loading /> : (
         <dl className="space-y-2 text-sm">
           <div className="flex justify-between"><dt className="text-muted">Configured</dt><dd><Badge tone={data.paytm.configured ? 'ok' : 'neutral'}>{data.paytm.configured ? 'Yes' : 'No'}</Badge></dd></div>
           <div className="flex justify-between"><dt className="text-muted">Enabled</dt><dd><Badge tone={data.paytm.enabled ? 'ok' : 'neutral'}>{data.paytm.enabled ? 'Yes' : 'No'}</Badge></dd></div>
+          {data.paytm.configured && <div className="flex justify-between"><dt className="text-muted">Merchant ID</dt><dd className="font-mono text-xs">{data.paytm.merchantId ?? '—'}</dd></div>}
+          {data.paytm.configured && <div className="flex justify-between"><dt className="text-muted">Environment</dt><dd>{data.paytm.environment ?? '—'}</dd></div>}
+          {data.paytm.blockedReason && <p role="alert" className="rounded-lg border border-danger/30 bg-danger/5 px-3 py-2 text-xs text-danger">{data.paytm.blockedReason === 'staging_in_production' ? 'This staging configuration is not used: Paytm staging is refused in a production deployment.' : 'This production configuration is not used: the deployment has not enabled Paytm production.'}</p>}
           <div className="flex justify-between"><dt className="text-muted">Merchant key stored</dt><dd>{data.paytm.merchantKeySet ? 'Yes (hidden)' : 'No'}</dd></div>
           <p className="pt-2 text-xs text-muted">Credentials are write-only: the merchant key is encrypted at rest and never shown. Entering or rotating Paytm credentials is not available in this release; do not enter live credentials in a local environment.</p>
         </dl>
