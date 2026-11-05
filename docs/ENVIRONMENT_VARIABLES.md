@@ -27,7 +27,9 @@ Used outside the app config:
 
 | Variable | Used by | Purpose |
 | --- | --- | --- |
-| `TEST_DATABASE_URL` | `apps/api/test/helpers.ts` | Test database, whose public schema is **dropped**. Default `postgres://ecom:ecom@localhost:5432/ecom_test` |
+| `TEST_DATABASE_URL` | `apps/api/test/helpers.ts` | Test database, whose public schema is **dropped**. Default `postgres://ecom:ecom@localhost:5432/ecom_test`. Setup asks the live connection for `current_database()` and refuses to drop anything unless the real name ends in `_test` |
+| `TRUSTED_PROXY_HOPS` | `apps/web`, `apps/admin` | Number of trusted reverse proxies in front of the server (0–8, default `0`). With `0`, no client IP is forwarded to the API. With `N`, the client is the Nth `X-Forwarded-For` entry from the right and must be a valid IP; the browser's own header is never copied. Set it only to the real number of proxies that overwrite or append the header, and keep the server unreachable except through them |
+| `ADMIN_API_URL` | `apps/admin` | Where the admin server reaches the API (server to server) |
 | `ADMIN_PASSWORD` | `npm run admin:create` | Password for the bootstrapped platform owner, read from the environment so it stays out of command arguments |
 
 When a real provider is approved, its credentials will be added here as new variables (for example a gateway key id, key secret and webhook secret), each validated in `env.ts`, with the live adapter selectable only by an explicit value.

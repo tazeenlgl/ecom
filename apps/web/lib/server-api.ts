@@ -1,5 +1,6 @@
 import { cookies, headers } from 'next/headers';
 import { cache } from 'react';
+import { clientIpFromHeaders, trustedProxyHops } from './client-ip';
 import { ApiError } from './errors';
 import type { Block, Customer, Link, Store } from './types';
 
@@ -21,7 +22,8 @@ export async function storeHost(): Promise<string> {
 export async function upstreamHeaders(extra: Record<string, string> = {}): Promise<Record<string, string>> {
   const [h, jar, host] = await Promise.all([headers(), cookies(), storeHost()]);
   const out: Record<string, string> = { accept: 'application/json', 'x-forwarded-host': host, 'x-forwarded-proto': 'https', ...extra };
-  const ip = h.get('x-forwarded-for') ?? h.get('x-real-ip');
+  // Never copy the browser's own header: forward a client IP only when it can be derived through trusted proxies.
+  const ip = clientIpFromHeaders(h, trustedProxyHops());
   if (ip) out['x-forwarded-for'] = ip;
   const session = jar.get(SESSION_COOKIE)?.value;
   if (session) out.authorization = `Bearer ${session}`;
