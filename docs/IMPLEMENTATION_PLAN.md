@@ -11,6 +11,8 @@ Status as of 2026-10-19. Each phase needs the user's approval before it starts.
 | Backend and database | All modules in [ARCHITECTURE.md](ARCHITECTURE.md), migrations `0001` and `0002`, 117 API operations, worker | branch `claude/project-thread-4t2912`, [TESTING.md](TESTING.md) (97 tests) |
 | Knowledge base | `docs/`, `README.md`, `CLAUDE.md`, `CHANGELOG.md` | this folder |
 | Paytm adapter (partial) | Per-store encrypted credentials, initiate, notification, status, refund | [PAYMENTS.md](PAYMENTS.md#paytm). Needs a staging test with a real test MID and key |
+| Payment safety (**implemented**, uncommitted) | Staging Paytm refused in production, admin Payments card fix, manual settlement of online refunds in processing, ordered and fault-tolerant reconciliation, abandoned-payment closing, no confirmation after the payment window | API tests pass on a disposable database (see [CHANGELOG.md](../CHANGELOG.md)). Paytm refund status and the live contract stay **blocked** on a staging account ([KNOWN_ISSUES.md](KNOWN_ISSUES.md)) |
+| Customer account, phase 1 (**implemented**, uncommitted) | Password set/change/reset UI, `PATCH /me` fix, wrong-current-password status, cancel dialog with refund preview, shared accessible dialog, address default rules. Details in [CHANGELOG.md](../CHANGELOG.md) | API tests written but **not yet run** (no test database); web tests pass; manual browser checklist pending |
 
 ## Next (proposed order)
 

@@ -2,6 +2,43 @@
 
 Dates are when the change was committed. Nothing has been deployed.
 
+## 2026-11-05: Payment safety, review fixes (uncommitted)
+
+Changed:
+- Reconciliation keeps checking an abandoned payment attempt for 48 hours after its creation. A provider-confirmed success goes through the late-payment path (recorded, order stays cancelled, full refund once). Before this, a lost webhook after abandonment left the customer charged with no refund.
+- Manual settlement of online refunds is stricter: the provider refund id must be entered back (`mark-succeeded` `reference`; `mark-failed` now takes `reference` and a `reason` of at least 10 characters). A refund marked failed by mistake can be corrected with `mark-succeeded`. Confirmation is refused if the order would be refunded above its total. The money of a failed, provider-accepted refund is held for 24 hours before a new refund can use it. Audit entries carry the actor, reference, provider refund id and previous status; `refund.manual_correction` is new; the order timeline gets a staff-only note.
+- The order page shows the provider refund id and offers the confirm, fail and correct actions.
+- Migration `0004_refund_settlement` (additive): the refund row records how it was settled: `settlement_source` (`provider` or `manual`), who (`settled_by_type`, `settled_by_id`), when (`settled_at`), the reference and a note. Webhooks record `provider` with the event id; staff settlements record `manual` with the entered reference and reason. A manual failure now has failure code `manual_failure` instead of a `manual: ` prefix, and the 24-hour hold uses `settled_at`. The admin order page shows the settlement. Applied only to disposable test databases.
+
+## 2026-11-05: Payment safety (uncommitted)
+
+Changed:
+- Paytm staging is refused when `NODE_ENV=production`: the admin save answers `409`, a saved staging configuration is not enabled, and a staging notification is rejected. `GET .../payment-gateways/paytm` gains `blockedReason`.
+- The admin Payments card showed no merchant ID because it read `mid`; it now reads `merchantId`, and also shows the environment and why a configuration is blocked.
+- Online refunds stuck in `processing` can be settled by staff: `mark-succeeded` now accepts an online refund in `processing` (keeping the provider reference), and the new `POST .../refunds/{id}/mark-failed` records a refund that did not complete. The order page offers both.
+- Payment reconciliation checks the least recently checked payments first, continues past a provider error for one payment, and throws at the end if any failed.
+- A pending payment whose order was cancelled is closed as `cancelled` (`abandoned`). A late success is still recorded and refunded (transaction state `cancelled -> succeeded` is allowed).
+- A success arriving after the payment window but before the expiry job no longer confirms the order: it is cancelled and refunded (new outcome `paid_after_expiry`).
+- No migration. New tests: `apps/api/test/payment-safety.test.ts` and a block in `paytm.test.ts`.
+
+## 2026-11-05: Customer account, phase 1 (uncommitted)
+
+Added:
+- Account security page (`/account/security`): set a password, or change it with the current one. Forgot-password flow in the sign-in form (reset code by OTP, then a new password). Both use the existing `PUT /me/password`, `POST /auth/otp/request` (`purpose: reset_password`) and `POST /auth/password/reset`; no endpoint was added.
+- A shared accessible `Dialog` (`apps/web/components/dialog.tsx`): labelled, Close button, Escape and backdrop close, focus trap, focus returned to the opener, page scroll locked, closing disabled while a request is in flight. Used by the cancel, return/exchange and address-delete dialogs.
+- Cancel dialog: shows what will be refunded before confirming (`actions.cancelRefund`, a new additive field on the storefront order view; `null` when nothing was collected), cannot be submitted twice, shows progress, and the order page confirms the outcome afterwards.
+- Address book: the first address becomes the default; deleting the default promotes the newest remaining address; unsetting the default by editing it is ignored (make another address the default instead); deleting asks for confirmation. The list is reloaded from the API after each change.
+- `apps/api/test/customer-account.test.ts`, `apps/web/test/password.test.ts`, `apps/web/test/cancel.test.ts`.
+
+Changed:
+- `PUT /v1/storefront/me/password` answers a wrong current password with `422 invalid_request` (`details.field = "currentPassword"`) instead of `401`. A 401 made the storefront proxy drop the session cookie, signing the customer out.
+- `PATCH /v1/storefront/me` rejects a body with neither `name` nor `email` (400) instead of failing on an empty update set; the name is trimmed and the email lower-cased.
+- `PATCH /v1/storefront/me/addresses/:id` with an empty body returns the address unchanged.
+- `cancelOrder` takes the refund amount from the shared `cancelRefundPaise` (same value as before; an order with nothing left to refund no longer attempts a zero refund).
+- `docs/openapi.json` regenerated. It also picks up `PATCH /v1/admin/stores/{storeId}/customers/{id}` (block/unblock), which was missing.
+
+Not changed: no migration (the one-default-per-customer unique index already existed), authentication, sessions, SMS, or other storefront features. The new API tests were type-checked but not run: no PostgreSQL test database was available.
+
 ## 2026-11-05: Admin dashboard (`apps/admin`, branch `feature/multi-store-admin`)
 
 Added:

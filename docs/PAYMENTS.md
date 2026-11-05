@@ -49,6 +49,11 @@ When a store has Paytm enabled, its online payments use Paytm. Otherwise they us
 
 Requests are signed like Paytm's PaytmChecksum library: AES-128-CBC over `sha256(payload|salt)+salt`, in `checksum.ts`.
 
+### Test and live environments
+
+- Production Paytm is refused until the deployment sets `PAYTM_PRODUCTION_ENABLED=true`.
+- **Staging Paytm is refused when `NODE_ENV=production`.** A staging "success" moves no money, so it must never confirm a real order. In a production deployment the admin API answers `409` for a staging save, a saved staging configuration is treated as not enabled, and a staging notification is rejected with `400 webhook_invalid`. `GET .../payment-gateways/paytm` shows `blockedReason` (`staging_in_production` or `production_not_enabled`, otherwise `null`). Code: `paytmBlockedReason` in `paytm/config.ts`.
+
 ### Not verified yet
 
 Everything above was written from Paytm's published API documentation and tested only against a simulated Paytm API. Before the first staging payment, confirm:
@@ -61,7 +66,9 @@ Everything above was written from Paytm's published API documentation and tested
 Also not built yet:
 
 - verifying the signature on Paytm's API *responses*;
-- a refund-status webhook or poll. Refunds stay `processing` after Paytm accepts them; see [KNOWN_ISSUES.md](KNOWN_ISSUES.md).
+- a refund-status webhook or poll. Refunds stay `processing` after Paytm accepts them until staff settle them by hand (see [Refunds](#refunds)). Paytm's refund API is asynchronous: its immediate reply only says the refund was registered. The refund-status API and the refund notification format were not found in the documentation pages checked, so none is implemented;
+- the refund host. Paytm's refund page shows `securegw-stage.paytmpayments.in` for `/refund/apply`, while the adapter uses one host for every call;
+- how Paytm marks a refund notification, and whether it would reach `parseWebhook` looking like a payment notification.
 
 ## Online payment flow
 
@@ -92,6 +99,7 @@ Also not built yet:
 | `amount_mismatch` | Reported amount differs from the transaction amount | Not applied. Order timeline note for staff |
 | `unknown_reference` | No transaction with that provider reference | Stored for investigation |
 | `paid_after_cancel` | Success arrives after the unpaid order expired or was cancelled | Payment recorded, and a **full refund is created and queued automatically** |
+| `paid_after_expiry` | Success arrives after the store's payment window (`unpaidOrderTtlMinutes`, default 30) but before the expiry job cancelled the order | The payment is recorded, the order is cancelled instead of confirmed, and a **full refund is created and queued** |
 | `duplicate_payment` | A second successful transaction for an order that is already paid | Not applied. The transaction is flagged `duplicate_payment` and a timeline note asks staff to refund it from the provider dashboard (see [KNOWN_ISSUES.md](KNOWN_ISSUES.md)) |
 
 The database also guarantees at most one `succeeded` transaction per order (`payment_transactions_one_success_uq`).
@@ -105,14 +113,30 @@ The database also guarantees at most one `succeeded` transaction per order (`pay
 ## Refunds
 
 - `POST /v1/admin/stores/:storeId/orders/:id/refunds` (`refunds.manage`) requires an `Idempotency-Key`. The amount must be at most the collected total, minus refunds already made, minus refunds in flight. Otherwise it returns `422 invalid_request` with `refundablePaise`. Refunds can be linked to a return request.
-- **Online refunds** are created `pending`, and `payments.process_refund` sends them to the provider (`processing`). A `refund.succeeded` or `refund.failed` webhook finishes them.
-- **COD refunds**, paid by bank transfer or cash, are recorded with `POST /v1/admin/stores/:storeId/refunds/:id/mark-succeeded`, with a reference. This endpoint refuses online refunds, because the provider must confirm those.
+- **Online refunds** are created `pending`, and `payments.process_refund` sends them to the provider (`processing`). A `refund.succeeded` or `refund.failed` webhook finishes them. The Paytm adapter does not produce those events yet, so a Paytm refund stays `processing` until staff settle it:
+  - `POST /v1/admin/stores/:storeId/refunds/:id/mark-succeeded` (`reference`) confirms an online refund in `processing` after the result was checked in the Paytm dashboard. `reference` must be the refund's provider refund id (shown on the order page); a different value is `422`, which proves the right refund was opened. It also **corrects** an online refund marked failed by mistake (`failed` with a provider refund id).
+  - `POST /v1/admin/stores/:storeId/refunds/:id/mark-failed` (`reference` = the provider refund id, `reason` of at least 10 characters) records that a `processing` online refund did not complete. The failure code is `manual_failure`; the reason is the settlement note.
+  - Safeguards:
+    - Both refuse an online refund that is still `pending` or has no provider refund id (the job sends it; confirming it by hand would record money that was never returned).
+    - **The money of a failed refund is held for 24 hours.** A new refund cannot reuse it (`422`, with `heldPaise`), so a mistaken failure can be corrected before the same money is refunded twice. The rest of the order stays refundable. A refund that failed without the provider ever accepting it is not held.
+    - A confirmation or correction is refused (`409`) if it would take the order's refunded amount, plus other refunds in flight, above the order total.
+    - Everything runs under the refund row lock and then the order lock, as the webhook path does. Of two simultaneous settlements, one wins and the other gets `409`, or corrects it; the money is recorded once.
+    - Audit: `refund.manual_success`, `refund.manual_failure` and `refund.manual_correction`, each with the actor, the entered reference, the provider refund id, the amount and the previous status. A failure is never overwritten by a correction: both stay in the history. The order timeline also gets a staff-only note.
+    - Customer message: the `refund.succeeded` notification is queued once per refund, whether the refund was confirmed by a webhook, by hand or by a correction. A failure sends nothing.
+  - **How a refund was settled is stored on the refund** (migration 0004): `settlement_source` (`provider` for a webhook, `manual` for staff), `settled_by_type` and `settled_by_id` (the admin, or the webhook), `settled_at`, `settlement_reference` (the reference staff entered, or the provider event id) and `settlement_note` (the reason or a short description). A correction replaces these with the correction's; the earlier failure stays in the audit log and the order timeline. Refunds settled before the migration have NULLs here, and the 24-hour hold falls back to `updated_at` for them. The order page shows who recorded a refund and when.
+- **COD refunds**, paid by bank transfer or cash, are recorded with `POST /v1/admin/stores/:storeId/refunds/:id/mark-succeeded`, with a reference. Online refunds are settled only as described above.
 - On success, `orders.refunded_paise` increases and payment status becomes `partially_refunded` or `refunded`. A notification is queued.
 - Cancelling a paid order creates a full refund automatically (idempotency key `cancel:<orderId>`).
 
 ## Reconciliation
 
 The `payments.reconcile` job finds transactions still `pending` more than 15 minutes after creation (up to 100 per run). It asks the provider for their status with `fetchPaymentStatus` and feeds the answer through the **same** event path, with event id `reconcile:<txnId>:<status>`. So a lost webhook cannot leave an order stuck, and a later real webhook becomes `ignored_stale` or `duplicate`.
+
+- **Order:** least recently checked first (`updated_at`, then id). A payment that is still pending after a check is touched, so one the provider keeps failing on cannot starve the rest.
+- **Failures:** a provider error for one payment is recorded and skipped; the others are still checked. At the end the job throws if anything failed (the message names up to three transaction ids), so it is retried with backoff and, if it keeps failing, appears as a failed job. Re-running is safe because every step is idempotent.
+- **Abandoned payments:** a payment still unconfirmed when its order is `cancelled` (expired or cancelled by staff) and which the provider does not report as paid is set to `cancelled` with failure code `abandoned`, and the order timeline notes it. The update only applies to a row that is still `pending`, so a webhook landing at the same time wins. A payment on a live order is never closed.
+- **Abandoned attempts are still checked for 48 hours after their creation.** The job asks the provider about them too (`status` `cancelled`, failure code `abandoned`). A success goes through the normal late-payment path: recorded (`paid_after_cancel`) and refunded in full, the order stays cancelled. So a lost webhook cannot leave a customer charged without a refund. After 48 hours the attempt is no longer checked, and a success that only the provider knows about must be found in the Paytm dashboard. A provider answer of pending or failed leaves the abandoned attempt unchanged.
+- **Late success is not discarded:** a success for an abandoned or cancelled payment is recorded (`paid_after_cancel`) and refunded in full; the order stays cancelled. If its webhook arrives after the job already recorded it, the webhook is `ignored_stale` and no second refund is made.
 
 Today the job is queued by `POST /v1/admin/stores/:storeId/payments/reconcile`. Scheduling it periodically is planned ([IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)).
 

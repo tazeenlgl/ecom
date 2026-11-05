@@ -103,12 +103,12 @@ Generated from `docs/openapi.json`. "Access" is the permission checked for the p
 | GET | `/v1/storefront/content/blocks` | none | Published blocks of a kind that are live now |
 | GET | `/v1/storefront/faqs` | none | Published FAQ entries |
 | GET | `/v1/storefront/me` | customer | Current customer |
-| PATCH | `/v1/storefront/me` | customer | Update name or email |
+| PATCH | `/v1/storefront/me` | customer | Update name or email (at least one is required; 400 otherwise) |
 | GET | `/v1/storefront/me/addresses` | customer | List saved addresses |
-| POST | `/v1/storefront/me/addresses` | customer | Add an address |
-| PATCH | `/v1/storefront/me/addresses/{id}` | customer | Update an address |
-| DELETE | `/v1/storefront/me/addresses/{id}` | customer | Delete an address |
-| PUT | `/v1/storefront/me/password` | customer | Set or change password (current password required if one is set); signs out other sessions |
+| POST | `/v1/storefront/me/addresses` | customer | Add an address; the first one becomes the default |
+| PATCH | `/v1/storefront/me/addresses/{id}` | customer | Update an address; `isDefault: false` on the current default is ignored (make another address the default) |
+| DELETE | `/v1/storefront/me/addresses/{id}` | customer | Delete an address; if it was the default, the newest remaining one becomes the default |
+| PUT | `/v1/storefront/me/password` | customer | Set or change password (current password required if one is set); signs out other sessions. A wrong current password is `422 invalid_request` with `details.field = "currentPassword"` (not 401, so the session stays valid) |
 | GET | `/v1/storefront/orders` | customer | My orders |
 | GET | `/v1/storefront/orders/{orderNumber}` | customer | Order detail with items, timeline and shipments |
 | POST | `/v1/storefront/orders/{orderNumber}/cancel` | customer | Cancel an order that has not been packed or shipped |
@@ -190,7 +190,8 @@ Generated from `docs/openapi.json`. "Access" is the permission checked for the p
 | PATCH | `/v1/admin/stores/{storeId}/promotions/{id}` | promotions.write | Update a promotion (kind is fixed) |
 | GET | `/v1/admin/stores/{storeId}/promotions/{id}/coupons` | catalogue.read | List coupon codes for a promotion |
 | POST | `/v1/admin/stores/{storeId}/promotions/{id}/coupons` | promotions.write | Create a coupon code for a coupon-only promotion |
-| POST | `/v1/admin/stores/{storeId}/refunds/{id}/mark-succeeded` | refunds.manage | Record a refund paid outside a provider (e.g. COD bank transfer) |
+| POST | `/v1/admin/stores/{storeId}/refunds/{id}/mark-succeeded` | refunds.manage | Record a refund paid outside a provider (COD), or confirm an online refund the provider accepted (processing), or correct one marked failed by mistake. For online refunds `reference` must be the provider refund id |
+| POST | `/v1/admin/stores/{storeId}/refunds/{id}/mark-failed` | refunds.manage | Record that an online refund the provider accepted (processing) did not complete. Needs the provider refund id (`reference`) and a `reason`. The money stays held for 24 hours |
 | GET | `/v1/admin/stores/{storeId}/reports/sales` | reports.read | Daily order count and value, excluding cancelled orders (store timezone) |
 | POST | `/v1/admin/stores/{storeId}/returns/{id}/status` | orders.manage | Approve, reject, receive, complete or cancel a return/exchange |
 | POST | `/v1/admin/stores/{storeId}/shipments/{id}/events` | orders.manage | Record a tracking event; out-of-order and duplicate events are kept but do not move status backwards |
