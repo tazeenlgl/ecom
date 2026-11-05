@@ -30,7 +30,11 @@ Last reviewed 2026-10-19.
 13. **No CORS configuration.** Not needed by the storefront: `apps/web` calls the API server-to-server through its BFF route. A browser-based admin UI on another origin would need an allow-list.
 14. **Admin accounts have no multi-factor authentication.**
 15. **The audit log has no request id or IP address.**
-16. **Tests not written** for the content and reports endpoints and the worker loop ([TESTING.md](TESTING.md#not-covered-yet)).
+16. **Tests not written** for the content and reports endpoints and the worker loop ([TESTING.md](TESTING.md#not-covered-yet)). The product list and sales report now have regression tests.
+17. **Admin API gaps found while building the admin UI** ([ADMIN.md](ADMIN.md#not-built-and-api-gaps)): no count endpoints, no order text search or customer filter, no list of return requests, no way to list another administrator's role grants, no read of a collection's products, no product delete, and no password change or reset for administrators.
+18. **`PATCH /v1/admin/stores/:storeId` with an empty body returns 500** instead of 400 (an empty update set). The admin UI always sends a field.
+19. **Block and media validation requires https image addresses.** A relative path such as `/photos/x.jpg` (used by the local preview) can be inserted into the database directly but cannot be saved through the API.
+20. **The admin sign-in rate limit is per IP and in memory** (10 per 15 minutes), so it resets when the API restarts and is shared by everyone behind one proxy.
 17. **An empty `apps/api/src/modules/pricing/` folder** is left over from the foundation. Price endpoints live in `catalogue`.
 
 ## Risks

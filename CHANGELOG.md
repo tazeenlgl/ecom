@@ -2,6 +2,20 @@
 
 Dates are when the change was committed. Nothing has been deployed.
 
+## 2026-11-05: Admin dashboard (`apps/admin`, branch `feature/multi-store-admin`)
+
+Added:
+- A Next.js 15 admin on port 3001 for platform and store administrators: brands, stores, administrators and role grants, a store selector limited to authorised stores, catalogue (products, variants, prices, photos, categories, collections), promotions and coupons, orders (status, cancel, notes, shipments, COD, returns, refunds, POS recovery), customers, pages and blocks, shipping zones, store settings and domains, POS status, jobs, audit history and the sales report. See [docs/ADMIN.md](docs/ADMIN.md).
+- Server-side admin sessions: the API bearer token lives in an httpOnly SameSite=Strict cookie, writes need a double-submit CSRF token, sign-out revokes the token at the API.
+- `apps/admin/test`: unit tests for permissions, CSRF and proxy paths, and `e2e-roles.mjs` (57 checks of four roles, cross-store access and session revocation against a running local stack).
+- `apps/api/test/regressions.test.ts`.
+
+Fixed:
+- `GET /v1/admin/stores/:storeId/reports/sales` returned 500 (Postgres `GROUP BY` error). It now groups by position.
+- `GET /v1/storefront/products` always returned `null` for `minPricePaise`, `maxMrpPaise` and `imageUrl`, because the correlated subqueries compared against an unqualified `id`. They are now table-qualified.
+
+Not changed: no migrations, no endpoint was added or changed in shape (`docs/openapi.json` is unchanged).
+
 ## 2026-11-05: Storefront UI (`apps/web`)
 
 Added:

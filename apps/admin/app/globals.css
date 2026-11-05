@@ -1,0 +1,50 @@
+@import "tailwindcss";
+
+/* TAZEEN admin: plum #5B277A is the accent, never a page background. Neutrals are warm and plum-tinted. */
+:root {
+  --bg: #f7f4f8;
+  --surface: #ffffff;
+  --fg: #1f1626;
+  --muted: #655c70;
+  --line: #e6dfea;
+  --accent: #5b277a;
+  --accent-fg: #ffffff;
+  --accent-soft: #f1e9f6;
+  --danger: #b3204b;
+  --ok: #1d7a4d;
+  --warn: #9a6200;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-accent: var(--accent);
+  --color-accent-fg: var(--accent-fg);
+  --color-accent-soft: var(--accent-soft);
+  --color-danger: var(--danger);
+  --color-ok: var(--ok);
+  --color-warn: var(--warn);
+  --font-sans: var(--font-body), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: var(--font-heading), ui-serif, Georgia, serif;
+}
+
+html { background: var(--bg); color: var(--fg); -webkit-font-smoothing: antialiased; }
+body { font-family: var(--font-sans); font-size: 14px; }
+.font-display { font-variant-numeric: lining-nums; font-feature-settings: "lnum" 1; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+::selection { background: var(--accent); color: var(--accent-fg); }
+
+@utility btn { @apply inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg px-4 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50; }
+@utility btn-primary { @apply btn bg-accent text-accent-fg hover:brightness-110; }
+@utility btn-secondary { @apply btn border border-line bg-surface hover:border-accent hover:text-accent; }
+@utility btn-danger { @apply btn border border-danger/40 bg-surface text-danger hover:bg-danger hover:text-white; }
+@utility btn-ghost { @apply btn px-2.5 py-1.5 hover:bg-accent-soft hover:text-accent; }
+@utility field { @apply w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none transition placeholder:text-muted/60 focus:border-accent focus:ring-4 focus:ring-accent/15 disabled:bg-bg disabled:text-muted; }
+@utility label { @apply mb-1 block text-xs font-medium text-muted; }
+@utility card { @apply rounded-xl border border-line bg-surface; }
+@utility th { @apply px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wide text-muted; }
+@utility td { @apply px-4 py-3 align-middle; }
+input[aria-invalid="true"], select[aria-invalid="true"], textarea[aria-invalid="true"] { border-color: var(--danger); }
