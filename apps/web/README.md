@@ -32,7 +32,7 @@ Prices shown on product and cart pages are for display. The checkout quote from 
 ```bash
 cp apps/web/.env.example apps/web/.env.local   # API_URL, STORE_HOST_OVERRIDE
 # API with TRUST_PROXY=true on :4000 (see docs/DEVELOPMENT.md)
-psql "$DATABASE_URL" -f apps/web/scripts/demo-store.sql   # optional demo store on demo.localhost (local only)
+psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f apps/web/scripts/demo-store.sql   # optional demo store on demo.localhost (local only; refuses DBs with real domains)
 STORE_HOST_OVERRIDE=demo.localhost npm run dev -w @ecom/web   # http://localhost:3000
 ```
 

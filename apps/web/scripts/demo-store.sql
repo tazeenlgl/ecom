@@ -2,8 +2,18 @@
 -- Creates a demo store on host "demo.localhost" with a few products, stock,
 -- a delivery zone and homepage content so the storefront can be clicked through.
 -- Stock rows stand in for the POS until a real adapter exists.
--- Usage: psql "$DATABASE_URL" -f apps/web/scripts/demo-store.sql
+-- Usage: psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f apps/web/scripts/demo-store.sql
+-- Safe to re-run: every insert skips rows that already exist.
 begin;
+
+-- Safety guard: refuse to run on a database that already has a real (non-.localhost)
+-- verified domain, i.e. anything that looks like staging or production.
+do $$
+begin
+  if exists (select 1 from store_domains where verified_at is not null and hostname not like '%.localhost') then
+    raise exception 'demo-store.sql is for local development only: this database has real verified domains';
+  end if;
+end $$;
 
 insert into brands (slug, name) values ('demo', 'Demo Brand') on conflict do nothing;
 
@@ -57,7 +67,8 @@ from product_variants v where v.store_id = (select id from stores where slug = '
 on conflict do nothing;
 
 insert into shipping_zones (store_id, name, pincode_prefixes, charge_paise, free_above_paise, cod_available, cod_fee_paise, estimated_days_min, estimated_days_max)
-select id, 'All India', array['1','2','3','4','5','6','7','8'], 9900, 199900, true, 4900, 3, 6 from stores where slug = 'demo';
+select id, 'All India', array['1','2','3','4','5','6','7','8'], 9900, 199900, true, 4900, 3, 6 from stores
+where slug = 'demo' and not exists (select 1 from shipping_zones z join stores s on s.id = z.store_id where s.slug = 'demo' and z.name = 'All India');
 
 insert into content_blocks (store_id, kind, key, data, status, position)
 select id, k.kind::content_block_kind, k.key, k.data::jsonb, 'published', k.pos from stores, (values
