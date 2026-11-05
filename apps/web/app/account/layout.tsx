@@ -18,6 +18,7 @@ export default async function AccountLayout({ children }: { children: ReactNode 
           <Link className="rounded-full px-4 py-2 hover:bg-fg/5 lg:rounded-xl" href="/account">Overview</Link>
           <Link className="rounded-full px-4 py-2 hover:bg-fg/5 lg:rounded-xl" href="/account/orders">Orders</Link>
           <Link className="rounded-full px-4 py-2 hover:bg-fg/5 lg:rounded-xl" href="/account/addresses">Addresses</Link>
+          <Link className="rounded-full px-4 py-2 hover:bg-fg/5 lg:rounded-xl" href="/account/security">Security</Link>
           <SignOutButton />
         </nav>
         <div className="min-w-0">{children}</div>

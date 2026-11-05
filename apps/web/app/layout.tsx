@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from 'next';
-import { Fraunces, Inter } from 'next/font/google';
+import { Cormorant_Garamond, Montserrat } from 'next/font/google';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { CartDrawer } from '@/components/cart-drawer';
@@ -7,11 +7,13 @@ import { CartProvider } from '@/components/cart-provider';
 import { Header } from '@/components/header';
 import { themeStyle } from '@/lib/format';
 import { ApiError } from '@/lib/errors';
-import { getCustomer, getNavigation, getStore } from '@/lib/server-api';
+import { getCustomer, getNavigation, getStore, pageExists } from '@/lib/server-api';
 import './globals.css';
 
-const body = Inter({ subsets: ['latin'], variable: '--font-body', display: 'swap' });
-const heading = Fraunces({ subsets: ['latin'], variable: '--font-heading', display: 'swap', axes: ['opsz'] });
+// No brand fonts were supplied. The TAZEEN wordmark is a wide geometric sans, so Montserrat carries the UI and
+// Cormorant Garamond gives the headings an elegant, editorial feel. Swap here if brand fonts are provided.
+const body = Montserrat({ subsets: ['latin'], variable: '--font-body', display: 'swap' });
+const heading = Cormorant_Garamond({ subsets: ['latin'], variable: '--font-heading', display: 'swap', weight: ['400', '500', '600'] });
 
 /** Unknown or unverified hosts get a plain page instead of an error. */
 async function storeOrNull() {
@@ -34,7 +36,7 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
-export const viewport: Viewport = { width: 'device-width', initialScale: 1, themeColor: '#f8f6f2' };
+export const viewport: Viewport = { width: 'device-width', initialScale: 1, themeColor: '#5b277a' };
 
 export default async function RootLayout({ children }: { children: ReactNode }) {
   const store = await storeOrNull();
@@ -50,7 +52,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
       </html>
     );
   }
-  const [nav, customer] = await Promise.all([getNavigation(), getCustomer()]);
+  const [nav, customer, hasShipping, hasReturns] = await Promise.all([getNavigation(), getCustomer(), pageExists('shipping-policy'), pageExists('return-policy')]);
   const { settings } = store;
 
   return (
@@ -61,7 +63,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
         </a>
         <CartProvider>
           {settings.announcement && (
-            <div className="overflow-hidden bg-fg py-2 text-xs tracking-[0.16em] text-bg uppercase">
+            <div className="overflow-hidden bg-accent py-2 text-xs tracking-[0.16em] text-accent-fg uppercase">
               <div className="marquee flex w-max gap-16 whitespace-nowrap">
                 {Array.from({ length: 8 }, (_, i) => (
                   <span key={i} aria-hidden={i > 0}>
@@ -76,10 +78,10 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
           <CartDrawer />
         </CartProvider>
 
-        <footer className="mt-24 border-t border-line bg-surface">
+        <footer className="mt-24 border-t-2 border-accent bg-surface [&_a:hover]:text-accent [&_a]:transition-colors">
           <div className="container-x grid gap-10 py-16 sm:grid-cols-2 lg:grid-cols-4">
             <div>
-              <p className="font-display text-2xl">{store.name}</p>
+              <p className="font-display text-3xl font-medium tracking-wide text-accent">{store.name}</p>
               {settings.seo?.defaultDescription && <p className="mt-3 max-w-xs text-sm text-muted">{settings.seo.defaultDescription}</p>}
             </div>
             <div>
@@ -95,8 +97,8 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
               <p className="eyebrow mb-4">Help</p>
               <ul className="space-y-2 text-sm">
                 <li><Link href="/faqs">FAQs</Link></li>
-                <li><Link href="/pages/shipping-policy">Shipping</Link></li>
-                <li><Link href="/pages/return-policy">Returns</Link></li>
+                {hasShipping && <li><Link href="/pages/shipping-policy">Shipping</Link></li>}
+                {hasReturns && <li><Link href="/pages/return-policy">Returns</Link></li>}
                 <li><Link href="/account/orders">Track an order</Link></li>
               </ul>
             </div>

@@ -78,7 +78,7 @@ export function SearchOverlay({ open, onClose }: { open: boolean; onClose: () =>
                 if (q.trim()) router.push(`/shop?q=${encodeURIComponent(q.trim())}`);
               }}
             >
-              <label className="flex items-center gap-4 border-b-2 border-fg pb-3">
+              <label className="flex items-center gap-4 border-b-2 border-accent pb-3">
                 <SearchIcon width={28} height={28} />
                 <input
                   ref={input}

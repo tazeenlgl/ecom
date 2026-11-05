@@ -15,3 +15,12 @@ export const CUSTOMER_CANCELLABLE_STATUSES = ['pending_payment', 'confirmed'] as
 export function customerCanCancel(order: OrderLike): boolean {
   return (CUSTOMER_CANCELLABLE_STATUSES as readonly string[]).includes(order.status) && order.fulfillmentStatus === 'unfulfilled';
 }
+
+/**
+ * What `cancelOrder` will refund when this order is cancelled: the whole unrefunded amount of an online payment that
+ * has been collected, otherwise nothing (unpaid and cash-on-delivery orders have no money to return).
+ * Shared by `cancelOrder` and the order presenter so the amount shown before confirming is the amount refunded.
+ */
+export function cancelRefundPaise(order: Pick<typeof orders.$inferSelect, 'paymentStatus' | 'totalPaise' | 'refundedPaise'>): number {
+  return order.paymentStatus === 'paid' ? Math.max(0, order.totalPaise - order.refundedPaise) : 0;
+}

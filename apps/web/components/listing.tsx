@@ -35,14 +35,14 @@ export async function Listing({
 
       {topLevel.length > 0 && (
         <nav aria-label="Categories" className="-mx-4 mb-10 flex gap-2 overflow-x-auto px-4 pb-2 sm:mx-0 sm:px-0">
-          <Link href="/shop" className={`shrink-0 rounded-full border px-4 py-2 text-sm transition ${!activeCategory ? 'border-fg bg-fg text-bg' : 'border-line hover:border-fg'}`}>
+          <Link href="/shop" className={`shrink-0 rounded-full border px-4 py-2 text-sm transition ${!activeCategory ? 'border-accent bg-accent text-accent-fg' : 'border-line hover:border-accent hover:text-accent'}`}>
             All
           </Link>
           {topLevel.map((c) => (
             <Link
               key={c.id}
               href={`/c/${c.slug}`}
-              className={`shrink-0 rounded-full border px-4 py-2 text-sm transition ${activeCategory === c.slug ? 'border-fg bg-fg text-bg' : 'border-line hover:border-fg'}`}
+              className={`shrink-0 rounded-full border px-4 py-2 text-sm transition ${activeCategory === c.slug ? 'border-accent bg-accent text-accent-fg' : 'border-line hover:border-accent hover:text-accent'}`}
             >
               {c.name}
             </Link>

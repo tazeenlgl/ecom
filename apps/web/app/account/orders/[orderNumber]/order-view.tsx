@@ -2,10 +2,12 @@
 
 import { AnimatePresence, motion } from 'motion/react';
 import Image from 'next/image';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { Dialog } from '@/components/dialog';
 import { CheckIcon } from '@/components/icons';
 import { OrderStatus } from '@/components/order-status';
 import { errorMessage, sf } from '@/lib/client-api';
+import { cancelRefundNotice } from '@/lib/cancel';
 import { ApiError } from '@/lib/errors';
 import { date, dateTime, humanize, money } from '@/lib/format';
 import { startPayment } from '@/lib/payment';
@@ -27,6 +29,11 @@ export function OrderView({ initial, justPlaced, paymentRetry }: { initial: Orde
   const [error, setError] = useState<string | null>(paymentRetry ? 'Your order is saved, but the payment could not start. Please try “Pay now” again.' : null);
   const [busy, setBusy] = useState(false);
   const [panel, setPanel] = useState<'cancel' | 'return' | null>(null);
+  const [dialogBusy, setDialogBusy] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  useEffect(() => {
+    if (!panel) setDialogBusy(false);
+  }, [panel]);
 
   const reload = async () => setOrder((await sf<{ order: Order }>(`orders/${order.orderNumber}`)).order);
 
@@ -79,6 +86,7 @@ export function OrderView({ initial, justPlaced, paymentRetry }: { initial: Orde
       </div>
 
       {error && <p className="rounded-xl bg-sale/10 p-4 text-sm text-sale" role="alert">{error}</p>}
+      {notice && <p className="rounded-xl bg-fg/5 p-4 text-sm" role="status">{notice}</p>}
 
       {awaitingPayment && order.paymentStatus !== 'pending' && (
         <button
@@ -192,12 +200,13 @@ export function OrderView({ initial, justPlaced, paymentRetry }: { initial: Orde
 
       <AnimatePresence>
         {panel && (
-          <motion.div className="fixed inset-0 z-50 flex items-end justify-center bg-fg/30 sm:items-center" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setPanel(null)}>
-            <motion.div role="dialog" aria-modal="true" className="w-full max-w-lg rounded-t-3xl bg-bg p-6 sm:rounded-3xl" initial={{ y: 40 }} animate={{ y: 0 }} exit={{ y: 40 }} onClick={(e) => e.stopPropagation()}>
+          <Dialog key={panel} title={panel === 'cancel' ? `Cancel order ${order.orderNumber}?` : 'Return or exchange'} busy={dialogBusy} onClose={() => setPanel(null)}>
               {panel === 'cancel' ? (
                 <CancelForm
                   order={order}
-                  onDone={(o) => (setOrder(o), setPanel(null))}
+                  onBusy={setDialogBusy}
+                  onClose={() => setPanel(null)}
+                  onDone={(o, notice) => (setOrder(o), setNotice(notice), setPanel(null))}
                   onStale={async (message) => {
                     // The order changed since this page loaded: refresh it, close the form and say why.
                     setPanel(null);
@@ -212,6 +221,7 @@ export function OrderView({ initial, justPlaced, paymentRetry }: { initial: Orde
               ) : (
                 <ReturnForm
                   order={order}
+                  onBusy={setDialogBusy}
                   onDone={async () => (await reload(), setPanel(null))}
                   onStale={async (message) => {
                     setPanel(null);
@@ -224,8 +234,7 @@ export function OrderView({ initial, justPlaced, paymentRetry }: { initial: Orde
                   }}
                 />
               )}
-            </motion.div>
-          </motion.div>
+          </Dialog>
         )}
       </AnimatePresence>
     </div>
@@ -236,32 +245,66 @@ function Row({ l, v }: { l: string; v: string }) {
   return <div className="flex justify-between"><span className="text-muted">{l}</span><span>{v}</span></div>;
 }
 
-function CancelForm({ order, onDone, onStale }: { order: Order; onDone: (o: Order) => void; onStale: (message: string) => void }) {
+function CancelForm({ order, onBusy, onClose, onDone, onStale }: { order: Order; onBusy: (busy: boolean) => void; onClose: () => void; onDone: (o: Order, notice: string) => void; onStale: (message: string) => void }) {
   const [reason, setReason] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  // A ref, not state: a fast double click or Enter twice fires before a re-render could disable the button.
+  const sending = useRef(false);
+  const refund = cancelRefundNotice(order);
   return (
     <form
+      noValidate
       onSubmit={async (e) => {
         e.preventDefault();
+        if (sending.current) return;
+        if (!reason.trim()) {
+          setError('Please tell us why you are cancelling.');
+          return;
+        }
+        sending.current = true;
+        setBusy(true);
+        onBusy(true);
+        setError(null);
         try {
-          onDone((await sf<{ order: Order }>(`orders/${order.orderNumber}/cancel`, { method: 'POST', body: { reason } })).order);
+          const cancelled = (await sf<{ order: Order }>(`orders/${order.orderNumber}/cancel`, { method: 'POST', body: { reason: reason.trim() } })).order;
+          onDone(cancelled, `Order ${order.orderNumber} is cancelled. ${refund.text}`);
         } catch (err) {
           // 409: the order moved on (for example it is now being processed). Refresh instead of leaving a dead button.
           if (err instanceof ApiError && err.status === 409) onStale(errorMessage(err));
           else setError(errorMessage(err));
+        } finally {
+          sending.current = false;
+          setBusy(false);
+          onBusy(false);
         }
       }}
       className="space-y-4"
     >
-      <h3 className="font-display text-2xl">Cancel order {order.orderNumber}?</h3>
-      <label className="block"><span className="label">Reason</span><textarea required className="field min-h-24" value={reason} onChange={(e) => setReason(e.target.value)} /></label>
-      {error && <p className="text-sm text-sale">{error}</p>}
-      <button className="btn-primary w-full">Cancel order</button>
+      <p className="rounded-xl bg-fg/5 p-4 text-sm" id="cancel-refund">{refund.text}</p>
+      <div>
+        <label className="label" htmlFor="cancel-reason">Reason</label>
+        <textarea
+          id="cancel-reason"
+          className="field min-h-24"
+          value={reason}
+          disabled={busy}
+          aria-invalid={error && !reason.trim() ? true : undefined}
+          aria-describedby={error ? 'cancel-error' : undefined}
+          onChange={(e) => setReason(e.target.value)}
+        />
+      </div>
+      {error && <p id="cancel-error" className="text-sm text-sale" role="alert">{error}</p>}
+      <div className="flex flex-col gap-3 sm:flex-row-reverse">
+        <button className="btn-primary w-full" disabled={busy}>{busy ? 'Cancelling…' : 'Cancel order'}</button>
+        <button type="button" className="btn-outline w-full" disabled={busy} onClick={onClose}>Keep order</button>
+      </div>
     </form>
   );
 }
 
-function ReturnForm({ order, onDone, onStale }: { order: Order; onDone: () => void; onStale: (message: string) => void }) {
+function ReturnForm({ order, onBusy, onDone, onStale }: { order: Order; onBusy: (busy: boolean) => void; onDone: () => void; onStale: (message: string) => void }) {
+  const sending = useRef(false);
   const [type, setType] = useState<'return' | 'exchange'>('return');
   const [reason, setReason] = useState('');
   const [qty, setQty] = useState<Record<string, number>>({});
@@ -288,13 +331,16 @@ function ReturnForm({ order, onDone, onStale }: { order: Order; onDone: () => vo
       noValidate
       onSubmit={async (e) => {
         e.preventDefault();
+        if (sending.current) return;
         const built = buildReturnRequest({ type, reason, quantities: qty, replacements: replacement });
         if (!built.ok) {
           setError({ field: built.field, message: built.error, orderItemId: built.orderItemId });
           return;
         }
         setError(null);
+        sending.current = true;
         setBusy(true);
+        onBusy(true);
         try {
           await sf(`orders/${order.orderNumber}/returns`, { method: 'POST', body: built.body });
           onDone();
@@ -302,12 +348,13 @@ function ReturnForm({ order, onDone, onStale }: { order: Order; onDone: () => vo
           // 409: the window closed or the order changed since this page loaded. Refresh instead of leaving a dead form.
           if (err instanceof ApiError && err.status === 409) onStale(errorMessage(err));
           else setError({ field: 'server', message: errorMessage(err) });
+          sending.current = false;
           setBusy(false);
+          onBusy(false);
         }
       }}
       className="space-y-4"
     >
-      <h3 className="font-display text-2xl">Return or exchange</h3>
       {order.actions.returnWindowEndsAt && <p className="text-xs text-muted">You can ask until {date(order.actions.returnWindowEndsAt)}.</p>}
       <div className="flex gap-2" role="group" aria-label="Request type">
         {(['return', 'exchange'] as const).map((t) => (

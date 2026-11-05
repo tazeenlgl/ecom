@@ -41,7 +41,7 @@ export function Header({ storeName, logoUrl, nav, signedIn }: { storeName: strin
 
           <Link href="/" className="flex items-center gap-2 lg:mr-6" aria-label={`${storeName} home`}>
             {logoUrl ? (
-              <Image src={logoUrl} alt={storeName} width={140} height={40} className="h-8 w-auto object-contain" priority />
+              <Image src={logoUrl} alt={storeName} width={150} height={50} className="h-10 w-auto object-contain sm:h-12" priority />
             ) : (
               <span className="whitespace-nowrap font-display text-xl tracking-tight sm:text-2xl">{storeName}</span>
             )}
@@ -52,7 +52,8 @@ export function Header({ storeName, logoUrl, nav, signedIn }: { storeName: strin
               <div key={item.href + item.label} onMouseEnter={() => setMenu(item.children?.length ? i : null)}>
                 <Link
                   href={item.href}
-                  className="relative px-3 py-2 text-sm tracking-wide after:absolute after:inset-x-3 after:bottom-1 after:h-px after:origin-left after:scale-x-0 after:bg-fg after:transition-transform after:duration-500 hover:after:scale-x-100"
+                  aria-current={pathname === item.href || pathname.startsWith(`${item.href}/`) ? 'page' : undefined}
+                  className="relative px-3 py-2 text-sm tracking-wide transition-colors hover:text-accent aria-[current=page]:font-medium aria-[current=page]:text-accent after:absolute after:inset-x-3 after:bottom-1 after:h-px after:origin-left after:scale-x-0 after:bg-accent after:transition-transform after:duration-500 hover:after:scale-x-100 aria-[current=page]:after:scale-x-100"
                 >
                   {item.label}
                 </Link>
@@ -136,7 +137,7 @@ export function Header({ storeName, logoUrl, nav, signedIn }: { storeName: strin
               transition={{ type: 'spring', damping: 32, stiffness: 320 }}
             >
               <div className="mb-8 flex items-center justify-between">
-                <span className="font-display text-2xl">{storeName}</span>
+                {logoUrl ? <Image src={logoUrl} alt={storeName} width={150} height={50} className="h-9 w-auto object-contain" /> : <span className="font-display text-2xl">{storeName}</span>}
                 <button className="btn-ghost rounded-full" aria-label="Close menu" onClick={() => setMobile(false)}>
                   <CloseIcon />
                 </button>
@@ -144,7 +145,7 @@ export function Header({ storeName, logoUrl, nav, signedIn }: { storeName: strin
               <ul className="space-y-1">
                 {items.map((item, i) => (
                   <motion.li key={item.href + item.label} initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.05 * i }}>
-                    <Link href={item.href} className="block py-3 font-display text-2xl">
+                    <Link href={item.href} className="block py-3 font-display text-2xl hover:text-accent aria-[current=page]:text-accent" aria-current={pathname === item.href ? 'page' : undefined}>
                       {item.label}
                     </Link>
                     {item.children?.length ? (

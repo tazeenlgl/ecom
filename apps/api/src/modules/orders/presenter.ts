@@ -1,7 +1,7 @@
 import { and, asc, eq } from 'drizzle-orm';
 import type { DbOrTx } from '../../db/client.js';
 import { orderEvents, orderItems, orders, returnRequests, shipments } from '../../db/schema.js';
-import { customerCanCancel } from './eligibility.js';
+import { cancelRefundPaise, customerCanCancel } from './eligibility.js';
 import { customerCanReturn, loadDeliveredAt, returnWindowEndsAt } from './returns.js';
 
 type Order = typeof orders.$inferSelect;
@@ -64,6 +64,8 @@ export async function presentOrder(db: DbOrTx, order: Order, now: Date = new Dat
     // What the customer may do right now, decided by the server (the endpoints re-check on every call).
     actions: {
       canCancel: customerCanCancel(order),
+      // What cancelling would refund right now (null when it cannot be cancelled or nothing was collected).
+      cancelRefund: customerCanCancel(order) && cancelRefundPaise(order) > 0 ? { amountPaise: cancelRefundPaise(order) } : null,
       canReturn: customerCanReturn({ deliveredAt, now, lines: items.map((i) => ({ id: i.id, quantity: i.quantity })), open }),
       returnWindowEndsAt: deliveredAt ? returnWindowEndsAt(deliveredAt) : null,
     },

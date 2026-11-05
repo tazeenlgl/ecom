@@ -50,12 +50,12 @@ export default async function HomePage() {
       )}
 
       {banners.items.length > 0 && (
-        <section className="container-x mt-16 grid gap-4 md:grid-cols-2">
+        <section className="container-x mt-16 grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
           {banners.items.map((b) => (
             <Reveal key={b.key}>
-              <Link href={b.data.link?.href ?? '/shop'} className="group relative block aspect-[16/10] overflow-hidden rounded-3xl bg-line">
-                <Image src={b.data.image.url} alt={b.data.image.alt ?? ''} fill sizes="(min-width: 768px) 50vw, 100vw" className="object-cover transition duration-[1.4s] ease-out-expo group-hover:scale-105" />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
+              <Link href={b.data.link?.href ?? '/shop'} className="group relative block aspect-[3/4] overflow-hidden rounded-2xl bg-line">
+                <Image src={b.data.image.url} alt={b.data.image.alt ?? ''} fill sizes="(min-width: 1024px) 25vw, (min-width: 768px) 33vw, 50vw" className="object-cover object-top transition duration-[1.4s] ease-out-expo group-hover:scale-105" />
+                {b.data.headline && <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />}
                 {b.data.headline && <p className="absolute bottom-6 left-6 right-6 font-display text-3xl text-white">{b.data.headline}</p>}
               </Link>
             </Reveal>

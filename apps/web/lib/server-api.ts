@@ -55,9 +55,23 @@ export async function apiOrNull<T>(path: string): Promise<T | null> {
   }
 }
 
-export const getStore = cache(async () => (await api<{ store: Store }>('store')).store);
+/**
+ * Local-preview branding override (apps/web/.env.local only, leave unset elsewhere): shows another display
+ * name and logo without touching the store's database record. Real stores set both in their admin settings.
+ */
+function withPreviewBrand(store: Store): Store {
+  const name = process.env.STOREFRONT_BRAND_NAME?.trim();
+  if (!name) return store;
+  const logoUrl = process.env.STOREFRONT_LOGO_URL?.trim();
+  return { ...store, name, brand: { ...store.brand, name }, settings: { ...store.settings, ...(logoUrl ? { logoUrl } : {}) } };
+}
 
-export const getNavigation = cache(async (): Promise<Link[]> => {
+export const getStore = cache(async () => withPreviewBrand((await api<{ store: Store }>('store')).store));
+
+/** True when the store has a published content page with this slug (used to show footer links only for pages that exist). */
+export const pageExists = cache(async (slug: string): Promise<boolean> => (await apiOrNull<{ page: unknown }>(`pages/${encodeURIComponent(slug)}`)) !== null);
+
+export const getNavigation =cache(async (): Promise<Link[]> => {
   const { items } = await api<{ items: Block<{ items: Link[] }>[] }>('content/blocks?kind=navigation');
   return items[0]?.data.items ?? [];
 });
