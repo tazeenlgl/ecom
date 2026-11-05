@@ -2,7 +2,7 @@ import { and, desc, eq, notInArray } from 'drizzle-orm';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import type { AppContext } from '../../context.js';
-import { orderEvents, orderItems, orders, paymentTransactions, returnRequests } from '../../db/schema.js';
+import { orderItems, orders, paymentTransactions, returnRequests } from '../../db/schema.js';
 import { actorOf } from '../../lib/audit.js';
 import { AppError, notFound } from '../../lib/errors.js';
 import { providerForStore } from '../payments/service.js';
@@ -10,12 +10,12 @@ import { cursorCondition, pageQuery, toPage } from '../../lib/pagination.js';
 import { RateLimiter } from '../../lib/rate-limit.js';
 import { defineRoute } from '../../lib/route.js';
 import { customerCanCancel } from './eligibility.js';
+import { eligibleReplacementVariants, loadDeliveredAt, requestedQuantities, RETURN_WINDOW_DAYS, returnWindowEndsAt } from './returns.js';
 import { canTransition } from './state-machines.js';
 import { presentOrder } from './presenter.js';
 import { addOrderEvent, cancelOrder, lockOrder, transitionOrder } from './service.js';
 
 const orderParams = z.object({ orderNumber: z.string().regex(/^[A-Z0-9]{1,8}-\d{6,}$/) });
-const RETURN_WINDOW_DAYS = 7;
 
 export function orderStorefrontRoutes(ctx: AppContext) {
   const paymentLimiter = new RateLimiter(20, 15 * 60_000);
@@ -53,7 +53,7 @@ export function orderStorefrontRoutes(ctx: AppContext) {
     });
 
     defineRoute(app, { method: 'GET', url: '/orders/:orderNumber', summary: 'Order detail with items, timeline and shipments', tag, auth: 'customer', params: orderParams }, async (request, { params }) => ({
-      order: await presentOrder(ctx.db, await findOwnOrder(request, params.orderNumber)),
+      order: await presentOrder(ctx.db, await findOwnOrder(request, params.orderNumber), ctx.now()),
     }));
 
     defineRoute(
@@ -76,7 +76,7 @@ export function orderStorefrontRoutes(ctx: AppContext) {
             throw new AppError(409, 'invalid_transition', 'This order can no longer be cancelled online. Please contact support.');
           }
           const updated = await cancelOrder(ctx, tx, order, actorOf(request), body.reason);
-          return { order: await presentOrder(tx, updated) };
+          return { order: await presentOrder(tx, updated, ctx.now()) };
         });
       },
     );
@@ -153,14 +153,8 @@ export function orderStorefrontRoutes(ctx: AppContext) {
         return ctx.db.transaction(async (tx) => {
           const order = await lockOrder(tx, own.storeId, own.id);
           if (order.fulfillmentStatus !== 'delivered') throw new AppError(409, 'invalid_transition', 'Returns can be requested after delivery.');
-          const [delivered] = await tx
-            .select({ at: orderEvents.createdAt })
-            .from(orderEvents)
-            .where(and(eq(orderEvents.orderId, order.id), eq(orderEvents.machine, 'fulfillment'), eq(orderEvents.toState, 'delivered')))
-            .orderBy(desc(orderEvents.createdAt))
-            .limit(1);
-          const deliveredAt = delivered?.at ?? order.updatedAt;
-          if (ctx.now().getTime() - deliveredAt.getTime() > RETURN_WINDOW_DAYS * 86_400_000) {
+          const deliveredAt = (await loadDeliveredAt(tx, order))!;
+          if (ctx.now().getTime() > returnWindowEndsAt(deliveredAt).getTime()) {
             throw new AppError(409, 'invalid_transition', 'The return window for this order has closed.');
           }
           const items = await tx.select().from(orderItems).where(and(eq(orderItems.storeId, order.storeId), eq(orderItems.orderId, order.id)));
@@ -168,15 +162,28 @@ export function orderStorefrontRoutes(ctx: AppContext) {
             .select({ items: returnRequests.items })
             .from(returnRequests)
             .where(and(eq(returnRequests.orderId, order.id), notInArray(returnRequests.status, ['rejected', 'cancelled'])));
-          const alreadyRequested = new Map<string, number>();
-          for (const r of open) for (const i of r.items) alreadyRequested.set(i.orderItemId, (alreadyRequested.get(i.orderItemId) ?? 0) + i.quantity);
+          const alreadyRequested = requestedQuantities(open);
+          const seen = new Set<string>();
           for (const line of body.items) {
             const item = items.find((i) => i.id === line.orderItemId);
             if (!item) throw notFound('Order item');
+            // One line per order item, so quantities cannot be split across duplicates to get past the limit below.
+            if (seen.has(item.id)) throw new AppError(422, 'invalid_request', `List ${item.productTitle} only once.`);
+            seen.add(item.id);
             if (line.quantity + (alreadyRequested.get(item.id) ?? 0) > item.quantity) {
               throw new AppError(422, 'invalid_request', `Return quantity exceeds what was ordered for ${item.productTitle}.`);
             }
-            if (body.type === 'exchange' && !line.exchangeVariantId) throw new AppError(422, 'invalid_request', 'Choose a replacement for each exchanged item.');
+            if (body.type === 'return') {
+              if (line.exchangeVariantId) throw new AppError(422, 'invalid_request', 'A replacement can only be chosen for an exchange.');
+            } else {
+              if (!line.exchangeVariantId) throw new AppError(422, 'invalid_request', 'Choose a replacement for each exchanged item.');
+              // Re-checked here, inside the transaction, against the same rule the storefront used to offer the choices.
+              // Unknown, other-store, other-product, inactive, unpublished and same-as-ordered variants all get the same answer.
+              const allowed = await eligibleReplacementVariants(tx, order, item);
+              if (!allowed.some((variant) => variant.id === line.exchangeVariantId)) {
+                throw new AppError(422, 'invalid_request', `Choose an available replacement for ${item.productTitle}.`);
+              }
+            }
           }
           const [request_] = await tx
             .insert(returnRequests)
@@ -185,6 +192,19 @@ export function orderStorefrontRoutes(ctx: AppContext) {
           await addOrderEvent(tx, order, { machine: 'return', to: 'requested', actor: actorOf(request), note: `${body.type} requested`, isPublic: true });
           return { returnRequest: request_ };
         });
+      },
+    );
+
+    // The replacement choices for an exchange, per order line: exactly the variants the returns endpoint will accept.
+    defineRoute(
+      app,
+      { method: 'GET', url: '/orders/:orderNumber/exchange-options', summary: 'Replacement variants available for exchanging each line of an order', tag, auth: 'customer', params: orderParams },
+      async (request, { params }) => {
+        const order = await findOwnOrder(request, params.orderNumber);
+        const items = await ctx.db.select().from(orderItems).where(and(eq(orderItems.storeId, order.storeId), eq(orderItems.orderId, order.id)));
+        return {
+          items: await Promise.all(items.map(async (item) => ({ orderItemId: item.id, variants: await eligibleReplacementVariants(ctx.db, order, item) }))),
+        };
       },
     );
 

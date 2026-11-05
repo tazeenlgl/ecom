@@ -9,7 +9,8 @@ import { errorMessage, sf } from '@/lib/client-api';
 import { ApiError } from '@/lib/errors';
 import { date, dateTime, humanize, money } from '@/lib/format';
 import { startPayment } from '@/lib/payment';
-import type { Order } from '@/lib/types';
+import { buildReturnRequest } from '@/lib/returns';
+import type { ExchangeOptions, Order } from '@/lib/types';
 
 const STEPS = ['placed', 'confirmed', 'packed', 'shipped', 'delivered'] as const;
 
@@ -49,7 +50,7 @@ export function OrderView({ initial, justPlaced, paymentRetry }: { initial: Orde
   const awaitingPayment = order.paymentMethod === 'online' && order.status === 'pending_payment';
   // The API decides (customerCanCancel); a stale page is corrected by the 409 handling in CancelForm.
   const canCancel = order.actions.canCancel;
-  const canReturn = order.fulfillmentStatus === 'delivered' && order.returns.every((r) => ['rejected', 'cancelled'].includes(r.status));
+  const canReturn = order.actions.canReturn;
   const step = progress(order);
   const cancelled = order.status === 'cancelled';
 
@@ -209,7 +210,19 @@ export function OrderView({ initial, justPlaced, paymentRetry }: { initial: Orde
                   }}
                 />
               ) : (
-                <ReturnForm order={order} onDone={async () => (await reload(), setPanel(null))} />
+                <ReturnForm
+                  order={order}
+                  onDone={async () => (await reload(), setPanel(null))}
+                  onStale={async (message) => {
+                    setPanel(null);
+                    try {
+                      await reload();
+                    } catch {
+                      /* the message below still explains it */
+                    }
+                    setError(message);
+                  }}
+                />
               )}
             </motion.div>
           </motion.div>
@@ -248,45 +261,101 @@ function CancelForm({ order, onDone, onStale }: { order: Order; onDone: (o: Orde
   );
 }
 
-function ReturnForm({ order, onDone }: { order: Order; onDone: () => void }) {
+function ReturnForm({ order, onDone, onStale }: { order: Order; onDone: () => void; onStale: (message: string) => void }) {
   const [type, setType] = useState<'return' | 'exchange'>('return');
   const [reason, setReason] = useState('');
   const [qty, setQty] = useState<Record<string, number>>({});
-  const [error, setError] = useState<string | null>(null);
-  const items = Object.entries(qty).filter(([, q]) => q > 0).map(([orderItemId, quantity]) => ({ orderItemId, quantity }));
+  const [replacement, setReplacement] = useState<Record<string, string>>({});
+  const [options, setOptions] = useState<ExchangeOptions | null>(null);
+  const [optionsError, setOptionsError] = useState<string | null>(null);
+  const [error, setError] = useState<{ field: 'items' | 'reason' | 'replacement' | 'server'; message: string; orderItemId?: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  // The replacement choices come from the API (same product, active, published): the same list it validates against.
+  useEffect(() => {
+    if (type !== 'exchange' || options) return;
+    sf<ExchangeOptions>(`orders/${order.orderNumber}/exchange-options`).then(setOptions, (err) => setOptionsError(errorMessage(err)));
+  }, [type, options, order.orderNumber]);
+
+  const variantsFor = (itemId: string) => options?.items.find((o) => o.orderItemId === itemId)?.variants ?? [];
+  const label = (v: { title: string; options: Record<string, string> }) => {
+    const extra = Object.values(v.options).join(' · ');
+    return extra && extra !== v.title ? `${v.title} (${extra})` : v.title;
+  };
+
   return (
     <form
+      noValidate
       onSubmit={async (e) => {
         e.preventDefault();
+        const built = buildReturnRequest({ type, reason, quantities: qty, replacements: replacement });
+        if (!built.ok) {
+          setError({ field: built.field, message: built.error, orderItemId: built.orderItemId });
+          return;
+        }
+        setError(null);
+        setBusy(true);
         try {
-          await sf(`orders/${order.orderNumber}/returns`, { method: 'POST', body: { type, reason, items } });
+          await sf(`orders/${order.orderNumber}/returns`, { method: 'POST', body: built.body });
           onDone();
         } catch (err) {
-          setError(errorMessage(err));
+          // 409: the window closed or the order changed since this page loaded. Refresh instead of leaving a dead form.
+          if (err instanceof ApiError && err.status === 409) onStale(errorMessage(err));
+          else setError({ field: 'server', message: errorMessage(err) });
+          setBusy(false);
         }
       }}
       className="space-y-4"
     >
       <h3 className="font-display text-2xl">Return or exchange</h3>
-      <div className="flex gap-2">
+      {order.actions.returnWindowEndsAt && <p className="text-xs text-muted">You can ask until {date(order.actions.returnWindowEndsAt)}.</p>}
+      <div className="flex gap-2" role="group" aria-label="Request type">
         {(['return', 'exchange'] as const).map((t) => (
-          <button type="button" key={t} onClick={() => setType(t)} className={`rounded-full border px-4 py-2 text-sm ${type === t ? 'border-fg bg-fg text-bg' : 'border-line'}`}>{humanize(t)}</button>
+          <button type="button" key={t} aria-pressed={type === t} onClick={() => (setType(t), setError(null))} className={`rounded-full border px-4 py-2 text-sm ${type === t ? 'border-fg bg-fg text-bg' : 'border-line'}`}>{humanize(t)}</button>
         ))}
       </div>
-      <ul className="space-y-2">
-        {order.items.map((i) => (
-          <li key={i.id} className="flex items-center justify-between gap-3 text-sm">
-            <span className="min-w-0 truncate">{i.productTitle} <span className="text-muted">· {i.variantTitle}</span></span>
-            <select className="field w-20 py-2" value={qty[i.id] ?? 0} onChange={(e) => setQty((q) => ({ ...q, [i.id]: Number(e.target.value) }))} aria-label={`Quantity of ${i.productTitle}`}>
-              {Array.from({ length: i.quantity + 1 }, (_, n) => <option key={n} value={n}>{n}</option>)}
-            </select>
-          </li>
-        ))}
+      <ul className="space-y-3">
+        {order.items.map((i) => {
+          const picked = (qty[i.id] ?? 0) > 0;
+          const choices = variantsFor(i.id);
+          const missing = error?.field === 'replacement' && error.orderItemId === i.id;
+          return (
+            <li key={i.id} className="text-sm">
+              <div className="flex items-center justify-between gap-3">
+                <span className="min-w-0 truncate">{i.productTitle} <span className="text-muted">· {i.variantTitle}</span></span>
+                <select className="field w-20 py-2" value={qty[i.id] ?? 0} onChange={(e) => setQty((q) => ({ ...q, [i.id]: Number(e.target.value) }))} aria-label={`Quantity of ${i.productTitle}`}>
+                  {Array.from({ length: i.quantity + 1 }, (_, n) => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </div>
+              {type === 'exchange' && picked && (
+                <div className="mt-2">
+                  <label className="label" htmlFor={`rep-${i.id}`}>Replacement for {i.productTitle}</label>
+                  {!options && !optionsError ? (
+                    <p className="text-xs text-muted" role="status">Loading choices…</p>
+                  ) : choices.length === 0 ? (
+                    <p className="text-xs text-muted">No other size or colour is available for this item right now. You can return it instead.</p>
+                  ) : (
+                    <select id={`rep-${i.id}`} className="field py-2" value={replacement[i.id] ?? ''} aria-invalid={missing || undefined} aria-describedby={missing ? `rep-${i.id}-error` : undefined} onChange={(e) => setReplacement((r) => ({ ...r, [i.id]: e.target.value }))}>
+                      <option value="">Choose…</option>
+                      {choices.map((v) => <option key={v.id} value={v.id}>{label(v)}</option>)}
+                    </select>
+                  )}
+                  {missing && <p id={`rep-${i.id}-error`} className="mt-1 text-xs text-sale">{error.message}</p>}
+                </div>
+              )}
+            </li>
+          );
+        })}
       </ul>
-      <label className="block"><span className="label">Reason</span><textarea required className="field min-h-24" value={reason} onChange={(e) => setReason(e.target.value)} /></label>
-      {type === 'exchange' && <p className="text-xs text-muted">Our team will contact you to confirm the replacement size or colour.</p>}
-      {error && <p className="text-sm text-sale">{error}</p>}
-      <button className="btn-primary w-full" disabled={items.length === 0}>Submit request</button>
+      {error?.field === 'items' && <p className="text-xs text-sale" role="alert">{error.message}</p>}
+      {optionsError && type === 'exchange' && <p className="text-xs text-sale" role="alert">{optionsError}</p>}
+      <div>
+        <label className="label" htmlFor="return-reason">Reason</label>
+        <textarea id="return-reason" className="field min-h-24" value={reason} aria-invalid={error?.field === 'reason' || undefined} aria-describedby={error?.field === 'reason' ? 'return-reason-error' : undefined} onChange={(e) => setReason(e.target.value)} />
+        {error?.field === 'reason' && <p id="return-reason-error" className="mt-1 text-xs text-sale">{error.message}</p>}
+      </div>
+      {error?.field === 'server' && <p className="text-sm text-sale" role="alert">{error.message}</p>}
+      <button className="btn-primary w-full" disabled={busy}>{busy ? 'Sending…' : 'Submit request'}</button>
     </form>
   );
 }

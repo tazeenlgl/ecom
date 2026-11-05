@@ -115,7 +115,7 @@ export function lastOtp(ctx: TestContext, phone: string): string {
 
 /** Signs a customer in with OTP on `host`; returns the session token. */
 export async function customerToken(ctx: TestContext, host: string, phone: string, headers: Record<string, string> = {}) {
-  const req = await ctx.app.inject({ method: 'POST', url: '/v1/storefront/auth/otp/request', headers: { host }, payload: { phone } });
+  const req = await ctx.app.inject({ method: 'POST', url: '/v1/storefront/auth/otp/request', headers: { host, ...headers }, payload: { phone } });
   if (req.statusCode !== 200) throw new Error(`otp request failed: ${req.body}`);
   const { challengeId } = req.json();
   const e164 = `+91${phone.replace(/\D/g, '').slice(-10)}`;

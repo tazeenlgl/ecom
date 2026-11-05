@@ -71,7 +71,7 @@ describe('customer cancellation eligibility (single rule)', () => {
 
   it('reports canCancel from the server and the cancel endpoint agrees', async () => {
     const o = await placeOrder();
-    expect(o.order.actions).toEqual({ canCancel: true });
+    expect(o.order.actions).toMatchObject({ canCancel: true, canReturn: false });
     expect((await getOrder(o.token, o.orderNumber)).actions.canCancel).toBe(true);
 
     const res = await cancel(o.token, o.orderNumber);

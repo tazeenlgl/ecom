@@ -9416,6 +9416,56 @@
         }
       }
     },
+    "/v1/storefront/orders/{orderNumber}/exchange-options": {
+      "get": {
+        "summary": "Replacement variants available for exchanging each line of an order",
+        "tags": [
+          "Storefront: orders"
+        ],
+        "description": "Store is resolved from the verified Host header; client-supplied store ids are ignored. Requires a signed-in customer of the resolved store.",
+        "security": [
+          {
+            "customerBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "orderNumber",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Z0-9]{1,8}-\\d{6,}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "4XX": {
+            "description": "Client error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/storefront/orders/{orderNumber}/payments": {
       "post": {
         "summary": "Start an online payment for an unpaid order; returns provider data for the client SDK",
