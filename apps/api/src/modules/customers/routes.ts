@@ -1,6 +1,7 @@
 import { and, desc, eq, gt, ilike, isNull, ne } from 'drizzle-orm';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
+import { clientIp } from '../../lib/client-ip.js';
 import type { AppContext } from '../../context.js';
 import type { Tx } from '../../db/client.js';
 import { customerAddresses, customerSessions, customers } from '../../db/schema.js';
@@ -121,7 +122,7 @@ export function customerStorefrontRoutes(ctx: AppContext) {
         // Reset codes go only to existing accounts with a password; the response is identical either way.
         const deliver =
           existing?.status !== 'blocked' && (body.purpose === 'login' || Boolean(existing?.passwordHash));
-        const challenge = await issueOtp(ctx, { storeId, phone: body.phone, purpose: body.purpose, ip: request.ip, deliver });
+        const challenge = await issueOtp(ctx, { storeId, phone: body.phone, purpose: body.purpose, ip: clientIp(request), deliver });
         return challenge;
       },
     );

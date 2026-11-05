@@ -1,6 +1,7 @@
 import { and, eq, gt, isNull } from 'drizzle-orm';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
+import { clientIp } from '../../lib/client-ip.js';
 import type { AppContext } from '../../context.js';
 import { adminRoleAssignments, adminSessions, adminUsers } from '../../db/schema.js';
 import { recordAudit } from '../../lib/audit.js';
@@ -97,7 +98,7 @@ export function adminAuthRoutes(ctx: AppContext) {
             action: 'admin.login',
             entityType: 'admin_user',
             entityId: admin.id,
-            changes: { ip: request.ip },
+            changes: { ip: clientIp(request) },
           });
         });
         return { token, expiresAt, admin: { id: admin.id, email: admin.email, name: admin.name } };

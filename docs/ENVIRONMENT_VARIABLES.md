@@ -9,7 +9,7 @@ All configuration comes from the environment. It is validated at startup by `app
 | `PORT` | no | `4000` | Listen port | |
 | `LOG_LEVEL` | no | `info` | pino level (`fatal` … `trace`, `silent`) | |
 | `DATABASE_URL` | **yes** | — | PostgreSQL connection string | Secret: contains a password |
-| `TRUST_PROXY` | no | `false` | Trust `X-Forwarded-*` from a reverse proxy | Set `true` **only** behind a proxy that overwrites these headers. Otherwise clients could spoof the host ([TENANCY.md](TENANCY.md#proxies)) |
+| `TRUST_PROXY` | no | `false` | Which peers may set `X-Forwarded-For` and `X-Forwarded-Host` | `false`, a hop count (1–8), or a comma-separated list of IPs, CIDR ranges, `loopback`, `linklocal` or `uniquelocal`. Only peers in the list are believed; anything a client puts in front of the real chain is ignored. `true` trusts every peer (any caller can choose its IP and store) and is **refused in production**; use `loopback` for local development ([TENANCY.md](TENANCY.md#proxies)) |
 | `OTP_HMAC_SECRET` | in production | development value | Key for the HMAC that stores OTP codes | Secret. At least 32 characters. Production refuses the default. Rotating it invalidates outstanding codes only |
 | `CUSTOMER_SESSION_TTL_DAYS` | no | `30` | Customer session lifetime (1–365) | |
 | `ADMIN_SESSION_TTL_HOURS` | no | `12` | Admin session lifetime (1–168) | |

@@ -6,7 +6,7 @@ Next.js 15 (App Router) storefront for every brand and store on the platform. On
 
 The browser only talks to the storefront. Server components call the API directly, and browser-side calls go through a backend-for-frontend route, `app/api/sf/[...path]/route.ts`, which:
 
-- forwards the shopper's host as `X-Forwarded-Host` (the API must run with `TRUST_PROXY=true` on a private network);
+- forwards the shopper's host as `X-Forwarded-Host` (the API must trust this server: `TRUST_PROXY=loopback` locally, or this server's address in deployment, on a private network);
 - keeps the customer session token and guest cart token in **httpOnly, SameSite=Lax cookies** (`sf_session`, `sf_cart`), so browser JavaScript never sees them;
 - only proxies `/v1/storefront/*` paths with plain segments (never admin or webhook routes);
 - refuses state-changing requests whose `Origin` is not this site (CSRF guard).

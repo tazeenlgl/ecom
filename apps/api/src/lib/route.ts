@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
+import { clientIp } from './client-ip.js';
 import type { Permission } from '../modules/iam/permissions.js';
 import { AppError } from './errors.js';
 import type { RateLimiter } from './rate-limit.js';
@@ -101,7 +102,7 @@ export function defineRoute<
     url: def.url,
     config: { doc },
     handler: async (request, reply) => {
-      def.rateLimit?.consume(`${def.url}:${request.ip}`);
+      def.rateLimit?.consume(`${def.url}:${clientIp(request)}`);
 
       // Authenticate before validating input so anonymous callers learn nothing about it.
       if (def.auth === 'customer') {

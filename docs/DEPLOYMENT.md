@@ -23,7 +23,8 @@ Both the API and the worker handle `SIGTERM`. The worker finishes its current ba
 
 See the diagram in [ARCHITECTURE.md](ARCHITECTURE.md#deployment-topology-proposed-not-verified).
 - A TLS-terminating proxy or load balancer in front of the API. Each brand domain points at it.
-- Set `TRUST_PROXY=true` **only** when that proxy overwrites `X-Forwarded-Host` and `X-Forwarded-For`.
+- Set `TRUST_PROXY` to the **addresses of the servers that connect to the API** (for example the storefront and admin servers), as IPs or CIDR ranges, or to a hop count. `TRUST_PROXY=true` trusts every caller and is refused when `NODE_ENV=production`.
+- The edge proxy must **overwrite** (not append to) `X-Forwarded-For` and `X-Forwarded-Host`. The storefront and admin servers forward a client IP only when `TRUSTED_PROXY_HOPS` says how many proxies sit in front of them, so set it to the real number (leave it at `0` if unsure). The web servers and the API must listen only on private or loopback addresses and be unreachable except through the proxy. The proxy configuration itself is not part of this repository and is not verified.
 - Managed PostgreSQL 16 with automated backups and point-in-time recovery, in an Indian region for data residency (assumption: confirm the requirement).
 - Health checks: `GET /health/live` (process up) and `GET /health/ready` (database reachable). These need no store host.
 
