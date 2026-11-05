@@ -346,8 +346,10 @@ export async function reconcilePendingPayments(ctx: AppContext, storeId: string)
     } catch (err) {
       failures.push({ transactionId: txn.id, message: err instanceof Error ? err.message : 'unknown error' });
     } finally {
-      // Rotate the row to the back of the queue whatever happened (a no-op once it is resolved).
-      await ctx.db.update(paymentTransactions).set({ updatedAt: new Date() }).where(eq(paymentTransactions.id, txn.id)).catch(() => undefined);
+      // Rotate the row to the back of the queue whatever happened (a no-op once it is resolved). The database's own
+      // clock, to the microsecond, like `created_at`: a millisecond value from this process let two rows touched in
+      // the same millisecond tie, and the random id then decided their order.
+      await ctx.db.update(paymentTransactions).set({ updatedAt: sql`clock_timestamp()` }).where(eq(paymentTransactions.id, txn.id)).catch(() => undefined);
     }
   }
   if (failures.length > 0) {

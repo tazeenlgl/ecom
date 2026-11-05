@@ -1,4 +1,4 @@
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, eq, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { auditLogs, jobs, orders, paymentTransactions, refunds } from '../src/db/schema.js';
 import { jobHandlers } from '../src/modules/jobs/handlers.js';
@@ -55,6 +55,12 @@ async function placeOnlineOrder() {
 
 const orderRow = async (id: string) => (await ctx.db.select().from(orders).where(eq(orders.id, id)))[0]!;
 const txnOf = async (providerRef: string) => (await ctx.db.select().from(paymentTransactions).where(eq(paymentTransactions.providerRef, providerRef)))[0]!;
+/** Pending fake payments in the order reconciliation takes them: least recently checked first, then id. */
+const pendingInQueueOrder = async () =>
+  (await ctx.db.select().from(paymentTransactions).where(and(eq(paymentTransactions.status, 'pending'), eq(paymentTransactions.provider, 'fake'))).orderBy(asc(paymentTransactions.updatedAt), asc(paymentTransactions.id)));
+/** Leaves earlier tests' payments out of the queue, so an ordering assertion sees only its own rows. */
+const closeUnrelatedPending = () =>
+  ctx.db.update(paymentTransactions).set({ status: 'cancelled', failureCode: 'test_isolation' }).where(and(eq(paymentTransactions.storeId, alpha.store.id), eq(paymentTransactions.status, 'pending')));
 const refundsOf = (orderId: string) => ctx.db.select().from(refunds).where(eq(refunds.orderId, orderId));
 
 /** Wraps the fake provider's status check to record the order of calls and fail chosen references. */
@@ -331,15 +337,62 @@ describe('payment reconciliation', () => {
   });
 
   it('does not let a payment that keeps failing starve the others', async () => {
+    await closeUnrelatedPending();
     const bad = await placeOnlineOrder();
+    const fresh = await placeOnlineOrder();
+    const before = { bad: (await txnOf(bad.providerRef)).updatedAt.getTime(), fresh: (await txnOf(fresh.providerRef)).updatedAt.getTime() };
     ctx.clock.offsetMs = 16 * 60_000;
     const watch = watchStatusChecks(new Set([bad.providerRef]));
     try {
-      await expect(reconcilePendingPayments(ctx.app.ctx, alpha.store.id)).rejects.toThrow();
+      await expect(reconcilePendingPayments(ctx.app.ctx, alpha.store.id)).rejects.toThrow(/failed 1/);
+      // Both were visited and moved to the back of the queue, the failing one included.
+      expect((await txnOf(bad.providerRef)).updatedAt.getTime()).toBeGreaterThan(before.bad);
+      expect((await txnOf(fresh.providerRef)).updatedAt.getTime()).toBeGreaterThan(before.fresh);
+
+      // A payment that was never checked comes before the one that keeps failing: put `never` ahead of both.
+      const never = await placeOnlineOrder();
+      await ctx.db.update(paymentTransactions).set({ updatedAt: new Date(Date.now() - 24 * 3_600_000) }).where(eq(paymentTransactions.providerRef, never.providerRef));
+      const expected = (await pendingInQueueOrder()).map((t) => t.providerRef);
+      expect(expected[0]).toBe(never.providerRef);
       watch.called.length = 0;
-      await expect(reconcilePendingPayments(ctx.app.ctx, alpha.store.id)).rejects.toThrow();
-      // It was touched in the first run, so it is checked after everything that was not.
-      expect(watch.called.at(-1)).toBe(bad.providerRef);
+      await expect(reconcilePendingPayments(ctx.app.ctx, alpha.store.id)).rejects.toThrow(/failed 1/);
+      // Exactly the queue order the database reports, with nobody skipped.
+      expect(watch.called).toEqual(expected);
+    } finally {
+      watch.restore();
+      ctx.clock.offsetMs = 0;
+    }
+  });
+
+  it('touches a payment with the database clock, so rows handled one after another never tie', async () => {
+    await closeUnrelatedPending();
+    for (let i = 0; i < 6; i += 1) await placeOnlineOrder();
+    ctx.clock.offsetMs = 16 * 60_000;
+    try {
+      await reconcilePendingPayments(ctx.app.ctx, alpha.store.id);
+    } finally {
+      ctx.clock.offsetMs = 0;
+    }
+    const rows = await pendingInQueueOrder();
+    expect(rows).toHaveLength(6);
+    // Microsecond stamps from one clock: six checks in a row all got different values.
+    const stamps = await ctx.db.execute(sql`select count(distinct updated_at)::int as n from payment_transactions where status = 'pending' and provider = 'fake'`);
+    expect(Number((stamps as unknown as { rows?: { n: number }[] }).rows?.[0]?.n ?? (stamps as unknown as { n: number }[])[0]?.n)).toBe(6);
+  });
+
+it('breaks a tie between payments last checked at the same instant by id, never by chance', async () => {
+    await closeUnrelatedPending();
+    for (let i = 0; i < 4; i += 1) await placeOnlineOrder();
+    const same = new Date(Date.now() - 3_600_000);
+    await ctx.db.update(paymentTransactions).set({ updatedAt: same }).where(and(eq(paymentTransactions.storeId, alpha.store.id), eq(paymentTransactions.status, 'pending')));
+    const byId = (await pendingInQueueOrder()).map((t) => t.id);
+    expect(byId).toEqual([...byId].sort());
+    const refByTxn = new Map((await pendingInQueueOrder()).map((t) => [t.id, t.providerRef]));
+    ctx.clock.offsetMs = 16 * 60_000;
+    const watch = watchStatusChecks();
+    try {
+      await reconcilePendingPayments(ctx.app.ctx, alpha.store.id);
+      expect(watch.called).toEqual(byId.map((id) => refByTxn.get(id)));
     } finally {
       watch.restore();
       ctx.clock.offsetMs = 0;
