@@ -2,6 +2,15 @@
 
 Dates are when the change was committed. Nothing has been deployed.
 
+## 2026-11-05: Storefront UI (`apps/web`)
+
+Added:
+- A Next.js 15 storefront serving every store from its host: home page from content blocks, listings, search, product pages, bag, OTP sign-in, checkout with Paytm or COD, and the customer account (orders, tracking, cancel, returns, addresses). See `apps/web/README.md`.
+- A backend-for-frontend route that keeps session and cart tokens in httpOnly cookies and proxies only storefront paths, so the API needs no CORS.
+- `apps/web/scripts/demo-store.sql`, a local-only demo store.
+
+Not changed: no API code or migrations.
+
 ## 2026-10-19: Paytm payment gateway (branch `claude/project-thread-4t2912`)
 
 Added:
