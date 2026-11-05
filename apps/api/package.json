@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/server.ts",
+    "dev": "tsx watch --env-file-if-exists=../../.env src/server.ts",
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/server.js",
     "typecheck": "tsc --noEmit",
@@ -11,7 +11,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx src/db/migrate.ts",
     "worker": "node dist/worker.js",
-    "dev:worker": "tsx watch src/worker.ts",
+    "dev:worker": "tsx watch --env-file-if-exists=../../.env src/worker.ts",
     "admin:create": "tsx src/scripts/create-admin.ts",
     "openapi": "tsx src/scripts/openapi.ts"
   },
