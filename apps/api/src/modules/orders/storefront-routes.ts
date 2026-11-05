@@ -9,6 +9,7 @@ import { providerForStore } from '../payments/service.js';
 import { cursorCondition, pageQuery, toPage } from '../../lib/pagination.js';
 import { RateLimiter } from '../../lib/rate-limit.js';
 import { defineRoute } from '../../lib/route.js';
+import { customerCanCancel } from './eligibility.js';
 import { canTransition } from './state-machines.js';
 import { presentOrder } from './presenter.js';
 import { addOrderEvent, cancelOrder, lockOrder, transitionOrder } from './service.js';
@@ -70,7 +71,8 @@ export function orderStorefrontRoutes(ctx: AppContext) {
         const own = await findOwnOrder(request, params.orderNumber);
         return ctx.db.transaction(async (tx) => {
           const order = await lockOrder(tx, own.storeId, own.id);
-          if (!['pending_payment', 'confirmed'].includes(order.status) || order.fulfillmentStatus !== 'unfulfilled') {
+          // Authoritative check on the locked row; the same rule the presenter reports as actions.canCancel.
+          if (!customerCanCancel(order)) {
             throw new AppError(409, 'invalid_transition', 'This order can no longer be cancelled online. Please contact support.');
           }
           const updated = await cancelOrder(ctx, tx, order, actorOf(request), body.reason);

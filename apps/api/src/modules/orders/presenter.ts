@@ -2,6 +2,8 @@ import { and, asc, eq } from 'drizzle-orm';
 import type { DbOrTx } from '../../db/client.js';
 import { orderEvents, orderItems, orders, returnRequests, shipments } from '../../db/schema.js';
 
+import { customerCanCancel } from './eligibility.js';
+
 type Order = typeof orders.$inferSelect;
 
 /** Customer-facing order view: no idempotency data, internal notes or POS references. */
@@ -57,5 +59,7 @@ export async function presentOrder(db: DbOrTx, order: Order) {
     timeline: events,
     shipments: shipmentRows,
     returns,
+    // What the customer may do right now, decided by the server (the endpoints re-check on every call).
+    actions: { canCancel: customerCanCancel(order) },
   };
 }

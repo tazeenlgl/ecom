@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import { CheckIcon } from '@/components/icons';
 import { OrderStatus } from '@/components/order-status';
 import { errorMessage, sf } from '@/lib/client-api';
+import { ApiError } from '@/lib/errors';
 import { date, dateTime, humanize, money } from '@/lib/format';
 import { startPayment } from '@/lib/payment';
 import type { Order } from '@/lib/types';
@@ -46,7 +47,8 @@ export function OrderView({ initial, justPlaced, paymentRetry }: { initial: Orde
   }, [order.paymentStatus, order.paymentMethod]);
 
   const awaitingPayment = order.paymentMethod === 'online' && order.status === 'pending_payment';
-  const canCancel = ['pending_payment', 'confirmed', 'processing'].includes(order.status) && ['unfulfilled', 'packed'].includes(order.fulfillmentStatus);
+  // The API decides (customerCanCancel); a stale page is corrected by the 409 handling in CancelForm.
+  const canCancel = order.actions.canCancel;
   const canReturn = order.fulfillmentStatus === 'delivered' && order.returns.every((r) => ['rejected', 'cancelled'].includes(r.status));
   const step = progress(order);
   const cancelled = order.status === 'cancelled';
@@ -192,7 +194,20 @@ export function OrderView({ initial, justPlaced, paymentRetry }: { initial: Orde
           <motion.div className="fixed inset-0 z-50 flex items-end justify-center bg-fg/30 sm:items-center" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setPanel(null)}>
             <motion.div role="dialog" aria-modal="true" className="w-full max-w-lg rounded-t-3xl bg-bg p-6 sm:rounded-3xl" initial={{ y: 40 }} animate={{ y: 0 }} exit={{ y: 40 }} onClick={(e) => e.stopPropagation()}>
               {panel === 'cancel' ? (
-                <CancelForm order={order} onDone={(o) => (setOrder(o), setPanel(null))} />
+                <CancelForm
+                  order={order}
+                  onDone={(o) => (setOrder(o), setPanel(null))}
+                  onStale={async (message) => {
+                    // The order changed since this page loaded: refresh it, close the form and say why.
+                    setPanel(null);
+                    try {
+                      await reload();
+                    } catch {
+                      /* the message below still explains it */
+                    }
+                    setError(message);
+                  }}
+                />
               ) : (
                 <ReturnForm order={order} onDone={async () => (await reload(), setPanel(null))} />
               )}
@@ -208,7 +223,7 @@ function Row({ l, v }: { l: string; v: string }) {
   return <div className="flex justify-between"><span className="text-muted">{l}</span><span>{v}</span></div>;
 }
 
-function CancelForm({ order, onDone }: { order: Order; onDone: (o: Order) => void }) {
+function CancelForm({ order, onDone, onStale }: { order: Order; onDone: (o: Order) => void; onStale: (message: string) => void }) {
   const [reason, setReason] = useState('');
   const [error, setError] = useState<string | null>(null);
   return (
@@ -218,7 +233,9 @@ function CancelForm({ order, onDone }: { order: Order; onDone: (o: Order) => voi
         try {
           onDone((await sf<{ order: Order }>(`orders/${order.orderNumber}/cancel`, { method: 'POST', body: { reason } })).order);
         } catch (err) {
-          setError(errorMessage(err));
+          // 409: the order moved on (for example it is now being processed). Refresh instead of leaving a dead button.
+          if (err instanceof ApiError && err.status === 409) onStale(errorMessage(err));
+          else setError(errorMessage(err));
         }
       }}
       className="space-y-4"
