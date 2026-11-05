@@ -90,7 +90,7 @@ Planned: the audit row does not yet store the request id or IP address.
 ## Known gaps
 
 See [KNOWN_ISSUES.md](KNOWN_ISSUES.md). The main ones:
-- Login rate limits are per process.
+- Login and coupon-guessing rate limits are per process (see KNOWN_ISSUES 20).
 - The repository is public.
 - There is no CORS allow-list yet.
 - Nothing is in place for TLS or secret storage because nothing is deployed.

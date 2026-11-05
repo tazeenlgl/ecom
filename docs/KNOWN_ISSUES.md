@@ -34,7 +34,7 @@ Last reviewed 2026-10-19.
 17. **Admin API gaps found while building the admin UI** ([ADMIN.md](ADMIN.md#not-built-and-api-gaps)): no count endpoints, no order text search or customer filter, no list of return requests, no way to list another administrator's role grants, no read of a collection's products, no product delete, and no password change or reset for administrators.
 18. **`PATCH /v1/admin/stores/:storeId` with an empty body returns 500** instead of 400 (an empty update set). The admin UI always sends a field.
 19. **Block and media validation requires https image addresses.** A relative path such as `/photos/x.jpg` (used by the local preview) can be inserted into the database directly but cannot be saved through the API.
-20. **The admin sign-in rate limit is per IP and in memory** (10 per 15 minutes), so it resets when the API restarts and is shared by everyone behind one proxy.
+20. **Rate limits are in memory.** Admin sign-in (10 per client IP and 5 per account per 15 minutes, the account key a keyed hash of the normalised email) and failed coupon attempts (10 per cart and 30 per client IP per 15 minutes) reset when the API restarts, and with several API instances each enforces its own count. Move them to a shared store before running more than one instance. Behind a proxy that does not forward a valid client IP, everyone shares one per-IP bucket. A determined attacker can still lock a known administrator out by failing five times (account limits trade availability for safety).
 17. **An empty `apps/api/src/modules/pricing/` folder** is left over from the foundation. Price endpoints live in `catalogue`.
 
 ## Risks

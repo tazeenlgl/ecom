@@ -30,6 +30,10 @@ export type RouteDef<P extends z.ZodType, Q extends z.ZodType, B extends z.ZodTy
   idempotencyKey?: boolean;
   /** Per-IP limiter applied before the handler. */
   rateLimit?: RateLimiter;
+  /** Documentation only: the handler enforces its own limits (for example failed-attempt counters). */
+  rateLimited?: boolean;
+  /** Replaces the default "Rate limited per client IP." sentence in the OpenAPI description. */
+  rateLimitNote?: string;
 };
 
 /** Route metadata collected for the OpenAPI document. */
@@ -45,6 +49,7 @@ export type RouteDoc = {
   status: number;
   idempotencyKey: boolean;
   rateLimited: boolean;
+  rateLimitNote?: string;
 };
 
 declare module 'fastify' {
@@ -94,7 +99,8 @@ export function defineRoute<
     body: def.body,
     status: def.status ?? 200,
     idempotencyKey: def.idempotencyKey ?? false,
-    rateLimited: Boolean(def.rateLimit),
+    rateLimited: Boolean(def.rateLimit) || Boolean(def.rateLimited),
+    ...(def.rateLimitNote ? { rateLimitNote: def.rateLimitNote } : {}),
   };
 
   app.route({

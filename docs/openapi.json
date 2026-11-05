@@ -8107,7 +8107,7 @@
         "tags": [
           "Storefront: cart"
         ],
-        "description": "Store is resolved from the verified Host header; client-supplied store ids are ignored.",
+        "description": "Store is resolved from the verified Host header; client-supplied store ids are ignored. Failed attempts are limited to 10 per cart and 30 per client IP every 15 minutes (429 `rate_limited`); successful applications do not count.",
         "security": [],
         "parameters": [],
         "requestBody": {
