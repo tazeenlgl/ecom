@@ -49,7 +49,7 @@ Both live on a server that this workspace cannot reach. A read-only remote sessi
 | POS has no order ingestion | Online orders can't decrement POS stock automatically | Operator workflow + reconciliation report as fallback; decided in Phase 1 once verified |
 
 ## 5. Recommended decisions (for Phase 1 approval)
-See [architecture.md](./architecture.md).
+See [ARCHITECTURE.md](./ARCHITECTURE.md) (renamed from `architecture.md` and rewritten after this report).
 
 ## 6. Next approvals required
 1. Read-only access to the POS server (or the POS source code) to complete the POS contract.

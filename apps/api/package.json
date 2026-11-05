@@ -9,7 +9,11 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "tsx src/db/migrate.ts"
+    "db:migrate": "tsx src/db/migrate.ts",
+    "worker": "node dist/worker.js",
+    "dev:worker": "tsx watch src/worker.ts",
+    "admin:create": "tsx src/scripts/create-admin.ts",
+    "openapi": "tsx src/scripts/openapi.ts"
   },
   "dependencies": {
     "drizzle-orm": "0.45.4",
