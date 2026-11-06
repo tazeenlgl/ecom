@@ -44,6 +44,9 @@ Last reviewed 2026-11-05.
 
 ## Risks
 
+- **Image optimizer redirects (R2 residual).** The storefront restricts `/_next/image` to `MEDIA_ALLOWED_HOSTS`, but Next.js 15.5.29 follows redirects from an allowed host and has no private-address or DNS-rebinding check (verified in `node_modules/next/dist/server/image-optimizer.js`). Allow only trusted hosts that do not redirect, filter the storefront server's outbound traffic to private ranges and the metadata address, and rate-limit `/_next/image` at the edge. A hardened proxy or a Next.js upgrade is the fix; see `docs/product-management/MEDIA_ARCHITECTURE.md` section 7.
+- **Legacy photos on other hosts.** Rows created before `MEDIA_ALLOWED_HOSTS` may point at hosts that are not listed. They still display (loaded directly, unoptimized) but are left out of Open Graph and JSON-LD, and editing a store's logo or favicon on such a host is refused until the host is listed or the image is re-hosted.
+
 | Risk | Impact | Mitigation |
 | --- | --- | --- |
 | **The repository is public** | Anyone can read the code and any secret committed by mistake | Make it private. `.env` is git-ignored. Secrets come only from the environment |

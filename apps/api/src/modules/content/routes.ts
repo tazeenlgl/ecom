@@ -5,6 +5,7 @@ import type { AppContext } from '../../context.js';
 import { contentBlocks, contentPages } from '../../db/schema.js';
 import { actorOf, recordAudit } from '../../lib/audit.js';
 import { notFound } from '../../lib/errors.js';
+import { assertMediaUrls } from '../../lib/media-url.js';
 import { defineRoute, seoSchema, slug, storeEntityParams, storeParams } from '../../lib/route.js';
 import { requireStore } from '../platform/routes.js';
 
@@ -101,6 +102,8 @@ export function contentAdminRoutes(ctx: AppContext) {
     defineRoute(app, { method: 'PUT', url: '/stores/:storeId/blocks', summary: 'Create or replace a content block by kind and key', tag, auth, params: storeParams, body: blockBody }, async (request, { params, body }) =>
       ctx.db.transaction(async (tx) => {
         await requireStore(tx, params.storeId);
+        if (body.kind === 'banner') assertMediaUrls(ctx.config.MEDIA_ALLOWED_HOSTS, [body.data.image.url, body.data.mobileImage?.url], 'data.image');
+        if (body.kind === 'homepage_section') assertMediaUrls(ctx.config.MEDIA_ALLOWED_HOSTS, [body.data.image?.url], 'data.image');
         const values = { ...body, ...toDates(body), storeId: params.storeId };
         const [block] = await tx
           .insert(contentBlocks)

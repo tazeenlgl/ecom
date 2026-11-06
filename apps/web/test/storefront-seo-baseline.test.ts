@@ -48,6 +48,7 @@ const metadata = async (p: unknown) => {
 };
 
 beforeEach(() => {
+  process.env.MEDIA_ALLOWED_HOSTS = 'cdn.example.com';
   state.product = null;
   state.pages = [];
   state.categories = [];
@@ -87,6 +88,17 @@ describe('product page metadata', () => {
     const bare = await metadata(product({ media: [] }));
     expect(bare.twitter).toMatchObject({ card: 'summary' });
     expect(bare.openGraph).toMatchObject({ images: undefined });
+  });
+
+  it('publishes only images on allowed hosts to search engines and social networks', async () => {
+    const offList = product({ media: [{ kind: 'image', url: 'https://evil.example/a.jpg', width: null, height: null, altText: null }, { kind: 'image', url: 'https://cdn.example.com/b.jpg', width: null, height: null, altText: null }] });
+    const m = await metadata(offList);
+    expect(m.openGraph).toMatchObject({ images: [{ url: 'https://cdn.example.com/b.jpg' }] });
+    const [ld] = await scripts(offList);
+    expect(ld!.data.image).toEqual(['https://cdn.example.com/b.jpg']);
+    process.env.MEDIA_ALLOWED_HOSTS = '';
+    expect((await metadata(offList)).openGraph).toMatchObject({ images: undefined });
+    expect((await metadata(offList)).twitter).toMatchObject({ card: 'summary' });
   });
 
   it('returns no metadata for an unknown product', async () => {

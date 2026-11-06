@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { parseMediaHosts } from '../lib/media-url.js';
 import { parseTrustProxy } from './trust-proxy.js';
 
 const booleanString = z
@@ -51,6 +52,20 @@ const envSchema = z
     PAYTM_STAGING_HOST: z.url({ protocol: /^https$/ }).default('https://securestage.paytmpayments.com'),
     PAYTM_PRODUCTION_HOST: z.url({ protocol: /^https$/ }).default('https://secure.paytmpayments.com'),
     PAYTM_PRODUCTION_ENABLED: booleanString,
+
+    // Hosts that image addresses (product photos, logo, banners) may point to: comma-separated host names or "*.host".
+    // Empty accepts no new image address. The storefront reads the same variable to decide what its image optimizer may fetch.
+    MEDIA_ALLOWED_HOSTS: z
+      .string()
+      .default('')
+      .transform((value, ctx) => {
+        try {
+          return parseMediaHosts(value);
+        } catch (err) {
+          ctx.addIssue({ code: 'custom', message: err instanceof Error ? err.message : 'invalid value' });
+          return z.NEVER;
+        }
+      }),
 
     WORKER_POLL_INTERVAL_MS: z.coerce.number().int().min(100).default(2000),
   })

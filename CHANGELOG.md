@@ -2,17 +2,23 @@
 
 Dates are when the change was committed. Nothing has been deployed.
 
-## 2026-11-06: Product SEO correctness (R1) (uncommitted)
+## 2026-11-06: Product SEO correctness (R1) and image host restriction (R2) (uncommitted)
 
 Plan and decisions: `docs/product-management/`. No migration. Nothing deployed.
 
-Changed:
+Changed (R1, storefront SEO):
 - The storefront product response now carries a resolved `canonicalUrl` (the store's primary verified domain; an admin canonical is honoured only on a verified domain of the same store, over https), `indexable`, `metaDescription`, `breadcrumbs`, and a per-variant tri-state `stock` (`in_stock` | `out_of_stock` | `unknown`; `inStock` stays). The product list carries `updatedAt` and `noIndex`.
 - The product page emits a canonical link, `robots: noindex,nofollow` when not indexable, Open Graph (SEO title, description, `og:url`, image with size and alt) and Twitter card, one JSON-LD `Offer` per variant, and breadcrumb JSON-LD. **Availability is stated only when the POS reported the stock; unknown stock no longer becomes `OutOfStock`.**
 - The meta description is built from whole sentences up to 155 characters and is omitted rather than cut mid-sentence. An admin-written SEO description is used as written.
 - The sitemap uses the update time for `lastmod` and leaves out `noIndex` products. `seo.canonicalUrl` must now be https.
 - Behaviour change to expect: a store with no verified primary domain gets no canonical and its product pages are `noindex`.
-- Tests: `catalogue-seo` and `storefront-seo-baseline` (API); `storefront-seo-baseline` (web). The web test config now compiles JSX so page modules can be imported.
+
+Changed (R2, image hosts):
+- New `MEDIA_ALLOWED_HOSTS` (API and storefront). The API refuses image addresses on other hosts, IP literals, local names, credentials, odd ports and fragments for product photos, store logo/favicon and banner/homepage images. **With the variable empty no new image address is accepted.** Existing rows are untouched.
+- The storefront's image optimizer no longer fetches from any https host (`hostname: '**'` removed): `remotePatterns` come from the list, images on other hosts load directly in the browser, and Open Graph/JSON-LD omit them. Upstream size is capped at 10 MB and the disk cache at 500 MB.
+- Known gap: Next.js 15.5.29 follows redirects and has no private-address check, so an allowed host that redirects elsewhere is not blocked. Allow only hosts you trust that do not redirect.
+- Tests: `catalogue-seo`, `storefront-seo-baseline`, `media-hosts` (API); `storefront-seo-baseline`, `media-hosts` (web); the web test config now compiles JSX so page modules can be imported.
+
 ## 2026-11-05: PR #3 review corrections H1 and H2 (uncommitted)
 
 Changed:

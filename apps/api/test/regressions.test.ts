@@ -10,7 +10,7 @@ const admin = (method: 'GET' | 'POST' | 'PUT', url: string, payload?: unknown) =
   ctx.app.inject({ method, url, headers: bearer(token), ...(payload ? { payload: payload as object } : {}) });
 
 beforeAll(async () => {
-  ctx = await setupTestApp();
+  ctx = await setupTestApp({ config: { MEDIA_ALLOWED_HOSTS: ['cdn.example.in'] } });
   alpha = await seedStore(ctx.db, 'alpha');
   token = (await adminToken(ctx, 'owner@example.com', [{ role: 'platform_owner', storeId: null }])).token;
 });
