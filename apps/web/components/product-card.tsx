@@ -20,7 +20,7 @@ export function ProductCard({ product, priority = false }: { product: ProductSum
         ) : (
           <div className="flex h-full items-center justify-center font-display text-4xl text-muted/40">{product.title.slice(0, 1)}</div>
         )}
-        {off > 0 && <span className="absolute left-3 top-3 rounded-full bg-bg/90 px-2.5 py-1 text-[11px] font-medium text-sale backdrop-blur">−{off}%</span>}
+        {off > 0 && <span className="absolute left-3 top-3 rounded-full bg-accent px-2.5 py-1 text-[11px] font-medium tracking-wide text-accent-fg">−{off}%</span>}
         <span className="absolute inset-x-3 bottom-3 translate-y-3 rounded-full bg-bg/90 py-2.5 text-center text-xs font-medium tracking-wide opacity-0 backdrop-blur transition duration-500 ease-out-expo group-hover:translate-y-0 group-hover:opacity-100">
           View product
         </span>

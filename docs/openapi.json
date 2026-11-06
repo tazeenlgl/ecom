@@ -3054,6 +3054,94 @@
             }
           }
         }
+      },
+      "patch": {
+        "summary": "Block or unblock a customer of this store (blocking signs them out everywhere)",
+        "tags": [
+          "Admin: customers"
+        ],
+        "description": "Requires permission `customers.manage` for the store in the path.",
+        "x-permission": "customers.manage",
+        "security": [
+          {
+            "adminBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "storeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "active",
+                      "blocked"
+                    ]
+                  },
+                  "reason": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "status",
+                  "reason"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "4XX": {
+            "description": "Client error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/v1/admin/stores/{storeId}/domains": {
@@ -6475,9 +6563,97 @@
         }
       }
     },
+    "/v1/admin/stores/{storeId}/refunds/{id}/mark-failed": {
+      "post": {
+        "summary": "Record that an online refund the provider accepted (status processing) did not complete, after checking it in the provider dashboard. Frees the amount for a new refund",
+        "tags": [
+          "Admin: payments"
+        ],
+        "description": "Requires permission `refunds.manage` for the store in the path.",
+        "x-permission": "refunds.manage",
+        "security": [
+          {
+            "adminBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "storeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reference": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 190
+                  }
+                },
+                "required": [
+                  "reference",
+                  "reason"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "4XX": {
+            "description": "Client error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/admin/stores/{storeId}/refunds/{id}/mark-succeeded": {
       "post": {
-        "summary": "Record a refund paid outside a provider (e.g. COD bank transfer)",
+        "summary": "Record a refund paid outside a provider (COD), or confirm an online refund the provider accepted (status processing) after checking it in the provider dashboard",
         "tags": [
           "Admin: payments"
         ],
@@ -8107,7 +8283,7 @@
         "tags": [
           "Storefront: cart"
         ],
-        "description": "Store is resolved from the verified Host header; client-supplied store ids are ignored.",
+        "description": "Store is resolved from the verified Host header; client-supplied store ids are ignored. Failed attempts are limited to 10 per cart and 30 per client IP every 15 minutes (429 `rate_limited`); successful applications do not count.",
         "security": [],
         "parameters": [],
         "requestBody": {
@@ -8825,7 +9001,7 @@
         }
       },
       "post": {
-        "summary": "Add an address",
+        "summary": "Add an address (the first one becomes the default)",
         "tags": [
           "Storefront: account"
         ],
@@ -8973,7 +9149,7 @@
     },
     "/v1/storefront/me/addresses/{id}": {
       "patch": {
-        "summary": "Update an address",
+        "summary": "Update an address (the default cannot be unset; choose another address as default instead)",
         "tags": [
           "Storefront: account"
         ],
@@ -9122,7 +9298,7 @@
         }
       },
       "delete": {
-        "summary": "Delete an address",
+        "summary": "Delete an address (if it was the default, the newest remaining one becomes the default)",
         "tags": [
           "Storefront: account"
         ],
@@ -9389,6 +9565,56 @@
             }
           }
         },
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "4XX": {
+            "description": "Client error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/storefront/orders/{orderNumber}/exchange-options": {
+      "get": {
+        "summary": "Replacement variants available for exchanging each line of an order",
+        "tags": [
+          "Storefront: orders"
+        ],
+        "description": "Store is resolved from the verified Host header; client-supplied store ids are ignored. Requires a signed-in customer of the resolved store.",
+        "security": [
+          {
+            "customerBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "orderNumber",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Z0-9]{1,8}-\\d{6,}$"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Success"

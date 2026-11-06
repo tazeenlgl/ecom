@@ -77,6 +77,18 @@ export function CheckoutClient({ signedIn }: { signedIn: boolean }) {
 
   const blocking = quote?.issues ?? [];
   const canPlace = Boolean(quote && addressId && blocking.length === 0 && !quoting && !placing);
+  // Why the button is disabled, in plain words (null while it is enabled or an error message is already shown).
+  const payHint = canPlace || placing
+    ? null
+    : !addressId
+      ? adding || addresses?.length === 0
+        ? 'Save your delivery address to continue.'
+        : 'Select a delivery address to continue.'
+      : blocking.length > 0
+        ? 'Fix the item issues above to continue.'
+        : quoting || (!quote && !error)
+          ? 'Updating your total…'
+          : null;
 
   const place = async () => {
     if (!quote || !addressId) return;
@@ -124,6 +136,8 @@ export function CheckoutClient({ signedIn }: { signedIn: boolean }) {
                 {addresses.map((a) => (
                   <button
                     key={a.id}
+                    type="button"
+                    aria-pressed={addressId === a.id}
                     onClick={() => setAddressId(a.id)}
                     className={`relative rounded-2xl border p-5 text-left text-sm transition ${addressId === a.id ? 'border-fg bg-surface shadow-sm' : 'border-line hover:border-fg/40'}`}
                   >
@@ -163,6 +177,8 @@ export function CheckoutClient({ signedIn }: { signedIn: boolean }) {
             ] as const).map(([value, title, sub]) => (
               <button
                 key={value}
+                type="button"
+                aria-pressed={method === value}
                 onClick={() => setMethod(value)}
                 className={`relative rounded-2xl border p-5 text-left transition ${method === value ? 'border-fg bg-surface shadow-sm' : 'border-line hover:border-fg/40'}`}
               >
@@ -221,9 +237,10 @@ export function CheckoutClient({ signedIn }: { signedIn: boolean }) {
           )}
           {error && <p className="mt-4 text-sm text-sale" role="alert">{error}</p>}
 
-          <button className="btn-primary mt-6 w-full py-4" disabled={!canPlace} onClick={place}>
+          <button className="btn-primary mt-6 w-full py-4" disabled={!canPlace} onClick={place} aria-describedby={payHint ? 'pay-hint' : undefined}>
             {placing ? 'Placing order…' : method === 'online' ? `Pay ${quote ? money(quote.totalPaise) : ''}` : 'Place order'}
           </button>
+          {payHint && <p id="pay-hint" className="mt-3 text-center text-sm text-muted" role="status">{payHint}</p>}
           <p className="mt-4 flex items-center justify-center gap-2 text-xs text-muted">
             <ShieldIcon width={14} height={14} /> Prices are confirmed by the store before your order is placed.
           </p>

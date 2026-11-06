@@ -96,7 +96,7 @@ export function checkoutRoutes(ctx: AppContext) {
             throw new AppError(422, 'idempotency_key_reused', 'This Idempotency-Key was already used for a different request.');
           }
           reply.status(200);
-          return { order: await presentOrder(ctx.db, existing), replayed: true };
+          return { order: await presentOrder(ctx.db, existing, ctx.now()), replayed: true };
         };
         const previous = await replay();
         if (previous) return previous;
@@ -217,7 +217,7 @@ export function checkoutRoutes(ctx: AppContext) {
               });
             }
             const [fresh] = await tx.select().from(orders).where(eq(orders.id, order!.id));
-            return { order: await presentOrder(tx, fresh!), replayed: false };
+            return { order: await presentOrder(tx, fresh!, ctx.now()), replayed: false };
           });
         } catch (err) {
           // A concurrent request with the same key won the race (unique key, or the cart

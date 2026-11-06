@@ -6,7 +6,7 @@ Next.js 15 (App Router) storefront for every brand and store on the platform. On
 
 The browser only talks to the storefront. Server components call the API directly, and browser-side calls go through a backend-for-frontend route, `app/api/sf/[...path]/route.ts`, which:
 
-- forwards the shopper's host as `X-Forwarded-Host` (the API must run with `TRUST_PROXY=true` on a private network);
+- forwards the shopper's host as `X-Forwarded-Host` (the API must trust this server: `TRUST_PROXY=loopback` locally, or this server's address in deployment, on a private network);
 - keeps the customer session token and guest cart token in **httpOnly, SameSite=Lax cookies** (`sf_session`, `sf_cart`), so browser JavaScript never sees them;
 - only proxies `/v1/storefront/*` paths with plain segments (never admin or webhook routes);
 - refuses state-changing requests whose `Origin` is not this site (CSRF guard).
@@ -31,7 +31,7 @@ Prices shown on product and cart pages are for display. The checkout quote from 
 
 ```bash
 cp apps/web/.env.example apps/web/.env.local   # API_URL, STORE_HOST_OVERRIDE
-# API with TRUST_PROXY=true on :4000 (see docs/DEVELOPMENT.md)
+# API with TRUST_PROXY=loopback (or true, development only) on :4000 (see docs/DEVELOPMENT.md)
 psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f apps/web/scripts/demo-store.sql   # optional demo store on demo.localhost (local only; refuses DBs with real domains)
 STORE_HOST_OVERRIDE=demo.localhost npm run dev -w @ecom/web   # http://localhost:3000
 ```

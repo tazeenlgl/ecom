@@ -1,6 +1,6 @@
 # Known issues, risks and open decisions
 
-Last reviewed 2026-10-19.
+Last reviewed 2026-11-05.
 
 ## Blocked
 
@@ -19,7 +19,7 @@ Last reviewed 2026-10-19.
 2. **Login rate limits are in-process.** Admin and customer password logins, OTP verification and payment initiation limits reset on restart, and each instance counts separately. OTP *issue* limits are database-backed and hold across instances. Fix: move the limits to PostgreSQL or Redis before running more than one instance.
 3. **Recurring jobs are not scheduled.** `pos.sync_stock` and `payments.reconcile` run only when an admin endpoint queues them. A scheduler is needed: a cron-triggered endpoint or a self-rescheduling job.
 4. **Cached stock has no freshness limit.** If the live POS check fails at checkout, the read model is used whatever its age. A maximum age should be decided.
-5. **Paytm refunds stay `processing`** after Paytm accepts them. There is no refund-status webhook or poll yet, so the refund is not marked succeeded automatically. Paytm's API responses are also not signature-checked yet.
+5. **Paytm refunds stay `processing`** after Paytm accepts them. There is no refund-status webhook or poll, and the refund-status API and refund notification format are not verified, so nothing finishes the refund automatically. Staff settle it with `mark-succeeded` or `mark-failed` after checking the Paytm dashboard (the order page offers both). Paytm's API responses are also not signature-checked yet. Blocked on: the verified refund status contract and a staging account.
 6. **Duplicate online payments** (two successful payments for one order) are flagged but must be refunded by hand in the provider dashboard. Auto-refunding needs the real provider's refund semantics.
 7. **No GST breakdown for shipping or COD fees.** Tax is computed on item lines only. Invoicing and GST reporting are out of scope until the accounting owner is decided.
 8. **Multi-shipment orders.** Order fulfillment status follows the latest shipment event, so one delivered shipment marks the whole order delivered and completed.
@@ -30,8 +30,17 @@ Last reviewed 2026-10-19.
 13. **No CORS configuration.** Not needed by the storefront: `apps/web` calls the API server-to-server through its BFF route. A browser-based admin UI on another origin would need an allow-list.
 14. **Admin accounts have no multi-factor authentication.**
 15. **The audit log has no request id or IP address.**
-16. **Tests not written** for the content and reports endpoints and the worker loop ([TESTING.md](TESTING.md#not-covered-yet)).
+16. **Tests not written** for the content and reports endpoints and the worker loop ([TESTING.md](TESTING.md#not-covered-yet)). The product list and sales report now have regression tests.
+17. **Admin API gaps found while building the admin UI** ([ADMIN.md](ADMIN.md#not-built-and-api-gaps)): no count endpoints, no order text search or customer filter, no list of return requests, no way to list another administrator's role grants, no read of a collection's products, no product delete, and no password change or reset for administrators.
+18. **`PATCH /v1/admin/stores/:storeId` with an empty body returns 500** instead of 400 (an empty update set). The admin UI always sends a field.
+19. **Block and media validation requires https image addresses.** A relative path such as `/photos/x.jpg` (used by the local preview) can be inserted into the database directly but cannot be saved through the API.
+20. **Rate limits are in memory.** Admin sign-in (10 per client IP and 5 per account per 15 minutes, the account key a keyed hash of the normalised email) and failed coupon attempts (10 per cart and 30 per client IP per 15 minutes) reset when the API restarts, and with several API instances each enforces its own count. Move them to a shared store before running more than one instance. Behind a proxy that does not forward a valid client IP, everyone shares one per-IP bucket. A determined attacker can still lock a known administrator out by failing five times (account limits trade availability for safety).
 17. **An empty `apps/api/src/modules/pricing/` folder** is left over from the foundation. Price endpoints live in `catalogue`.
+
+21. **Customer account follow-ups** (after phase 1): the password reset and sign-in screens cannot be completed end to end until a real SMS provider is approved (the log sender never delivers). A customer's email is not verified, and a name cannot be cleared once set. Addresses have no maximum count. A customer who forgets their password and never set one signs in with a one-time code instead. Dialog behaviour (Escape, focus trap, double submit) has no automated test; use the manual checklist in the phase 1 report.
+
+22. **A failed refund's money is held for 24 hours.** Settlement is now stored on the refund (migration 0004), but the hold is a fixed rule: a genuine provider failure also waits 24 hours before the money can be refunded again, and cancelling a paid order inside that window fails with `422` because the held money is not refundable. Refunds settled before the migration have no settlement metadata.
+23. **Payment safety follow-ups:** a transaction left `created` (the process stopped between saving it and the provider call, so it has no provider reference) is not reconciled or closed. An abandoned attempt is checked only for 48 hours after its creation. A Paytm refund notification, if its form fields look like a payment notification, could be read as one; the format is unverified. The refund job still calls the provider inside a database transaction. The late-payment window uses the store's `unpaidOrderTtlMinutes` against the order's placed time, with no grace period. A test database whose clock runs ahead of the machine can make job-driven tests flaky (`commerce.test.ts` failed 3 tests in 2 of about 6 runs; not fixed here).
 
 ## Risks
 

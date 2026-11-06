@@ -98,6 +98,15 @@ export const refunds = pgTable(
     providerRef: text('provider_ref'),
     idempotencyKey: text('idempotency_key').notNull(),
     failureCode: text('failure_code'),
+    // How the final state (succeeded or failed) was reached, and who recorded it. Null until then, and for
+    // refunds settled before these columns existed.
+    settlementSource: text('settlement_source'),
+    settledByType: text('settled_by_type'),
+    settledById: text('settled_by_id'),
+    settledAt: timestamp('settled_at', { withTimezone: true }),
+    // Manual settlements: the reference the staff member entered (the provider refund id, or a COD payout reference).
+    settlementReference: text('settlement_reference'),
+    settlementNote: text('settlement_note'),
     ...timestamps,
   },
   (t) => [
@@ -119,6 +128,7 @@ export const refunds = pgTable(
       foreignColumns: [returnRequests.storeId, returnRequests.id],
     }).onDelete('restrict'),
     check('refunds_amount_ck', sql`${t.amountPaise} > 0`),
+    check('refunds_settlement_source_ck', sql`${t.settlementSource} is null or ${t.settlementSource} in ('provider', 'manual')`),
   ],
 );
 

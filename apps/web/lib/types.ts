@@ -181,7 +181,11 @@ export type Order = {
   timeline: { machine: string; toState: string; note: string | null; createdAt: string }[];
   shipments: { id: string; status: string; courier: string | null; trackingNumber: string | null; trackingUrl: string | null }[];
   returns: { id: string; type: string; status: string; createdAt: string }[];
+  /** What the customer may do right now, decided by the API. Never recompute these rules in the browser. */
+  actions: { canCancel: boolean; cancelRefund: { amountPaise: number } | null; canReturn: boolean; returnWindowEndsAt: string | null };
 };
+
+export type ExchangeOptions = { items: { orderItemId: string; variants: { id: string; title: string; options: Record<string, string> }[] }[] };
 
 export type Serviceability = {
   pincode: string;

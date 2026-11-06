@@ -19,7 +19,8 @@ const admin = (method: 'GET' | 'POST' | 'PATCH' | 'PUT', url: string, payload?: 
   ctx.app.inject({ method, url, headers: { ...bearer(adminTok), ...headers }, ...(payload ? { payload: payload as object } : {}) });
 const shop = (method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE', url: string, headers: Record<string, string> = {}, payload?: unknown, host = alpha.host) =>
   ctx.app.inject({ method, url: `/v1/storefront${url}`, headers: { host, ...headers }, ...(payload ? { payload: payload as object } : {}) });
-const runJobs = () => runDueJobs(ctx.db, jobHandlers(ctx.app.ctx), 'test-worker', 50, new Date(Date.now() + ctx.clock.offsetMs));
+// +5s: a job's run_at is stamped by the database (microseconds) and compared with this machine's clock (milliseconds); claiming at once can miss it by a millisecond or two.
+const runJobs = () => runDueJobs(ctx.db, jobHandlers(ctx.app.ctx), 'test-worker', 50, new Date(Date.now() + ctx.clock.offsetMs + 5_000));
 
 async function addAddress(token: string, pincode = '560001') {
   const res = await shop('POST', '/me/addresses', bearer(token), { name: 'Test Buyer', phone: '9876500000', line1: '12 Residency Rd', city: 'Bengaluru', state: 'Karnataka', pincode });

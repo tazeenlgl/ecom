@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import Fastify, { type FastifyServerOptions } from 'fastify';
 import type { Config } from './config/env.js';
+import { toFastifyTrustProxy } from './config/trust-proxy.js';
 import type { AppContext } from './context.js';
 import type { Database } from './db/client.js';
 import { registerErrorHandling } from './lib/errors.js';
@@ -81,13 +82,16 @@ export async function buildApp(deps: AppDeps) {
 
   const app = Fastify({
     logger,
-    trustProxy: config.TRUST_PROXY,
+    trustProxy: toFastifyTrustProxy(config.TRUST_PROXY),
     // Propagate a caller's request id when it is well-formed; otherwise mint one.
     genReqId: (req) => {
       const incoming = req.headers['x-request-id'];
       return typeof incoming === 'string' && REQUEST_ID.test(incoming) ? incoming : randomUUID();
     },
   });
+  if (config.TRUST_PROXY === true) {
+    app.log.warn('TRUST_PROXY=true trusts every peer: any caller can choose its client IP and store host. Development only; list proxy addresses instead.');
+  }
   const ctx = createContext(deps, app.log);
 
   registerErrorHandling(app);

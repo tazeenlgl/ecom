@@ -1,9 +1,11 @@
 import { and, desc, eq, gt, ilike, isNull, ne } from 'drizzle-orm';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
+import { clientIp } from '../../lib/client-ip.js';
 import type { AppContext } from '../../context.js';
 import type { Tx } from '../../db/client.js';
 import { customerAddresses, customerSessions, customers } from '../../db/schema.js';
+import { actorOf, recordAudit } from '../../lib/audit.js';
 import { DUMMY_PASSWORD_HASH, hashPassword, newToken, sha256, verifyPassword } from '../../lib/crypto.js';
 import { AppError, notFound } from '../../lib/errors.js';
 import { INDIAN_STATES, normalizeIndianMobile } from '../../lib/india.js';
@@ -33,6 +35,14 @@ const phone = z.string().transform((v, c) => {
 });
 const password = z.string().min(8, 'at least 8 characters').max(200);
 const otpCode = z.string().regex(/^\d{6}$/);
+
+// No `.default()` here: this schema backs a PATCH. At least one field must be present, otherwise there is nothing to update.
+const profileBody = z
+  .object({
+    name: z.string().trim().min(1).max(120).optional(),
+    email: z.preprocess((v) => (typeof v === 'string' ? v.trim().toLowerCase() : v), z.email().max(254)).nullable().optional(),
+  })
+  .refine((b) => b.name !== undefined || b.email !== undefined, { message: 'Provide a name or an email to update.' });
 
 const publicCustomer = {
   id: customers.id,
@@ -121,7 +131,7 @@ export function customerStorefrontRoutes(ctx: AppContext) {
         // Reset codes go only to existing accounts with a password; the response is identical either way.
         const deliver =
           existing?.status !== 'blocked' && (body.purpose === 'login' || Boolean(existing?.passwordHash));
-        const challenge = await issueOtp(ctx, { storeId, phone: body.phone, purpose: body.purpose, ip: request.ip, deliver });
+        const challenge = await issueOtp(ctx, { storeId, phone: body.phone, purpose: body.purpose, ip: clientIp(request), deliver });
         return challenge;
       },
     );
@@ -236,7 +246,7 @@ export function customerStorefrontRoutes(ctx: AppContext) {
         summary: 'Update name or email',
         tag,
         auth: 'customer',
-        body: z.object({ name: z.string().min(1).max(120).optional(), email: z.email().max(254).nullable().optional() }),
+        body: profileBody,
       },
       async (request, { body }) => {
         const [customer] = await ctx.db
@@ -264,7 +274,8 @@ export function customerStorefrontRoutes(ctx: AppContext) {
         const me = request.customer!;
         const [customer] = await ctx.db.select().from(customers).where(eq(customers.id, me.id));
         if (customer!.passwordHash && !(await verifyPassword(body.currentPassword ?? '', customer!.passwordHash))) {
-          throw new AppError(401, 'unauthenticated', 'Current password is incorrect.');
+          // Not 401: the caller is signed in, and a 401 makes the storefront proxy drop the session cookie.
+          throw new AppError(422, 'invalid_request', 'Current password is incorrect.', { field: 'currentPassword' });
         }
         const passwordHash = await hashPassword(body.newPassword);
         await ctx.db.transaction(async (tx) => {
@@ -291,16 +302,40 @@ export function customerStorefrontRoutes(ctx: AppContext) {
       items: await ctx.db.select().from(customerAddresses).where(addressScope(request)).orderBy(desc(customerAddresses.isDefault), desc(customerAddresses.createdAt)),
     }));
 
+    // Invariant: a customer with at least one address has exactly one default (the database already forbids two).
+    // Every write below takes a row lock on the customer first, so concurrent writes cannot interleave.
+    const lockCustomer = async (tx: Tx, request: FastifyRequest) => {
+      await tx
+        .select({ id: customers.id })
+        .from(customers)
+        .where(and(eq(customers.storeId, request.store.id), eq(customers.id, request.customer!.id)))
+        .for('update');
+    };
+    // Promotes the newest address when none is the default (after a delete, or for data saved before this rule existed).
+    const ensureDefault = async (tx: Tx, request: FastifyRequest) => {
+      const rows = await tx
+        .select({ id: customerAddresses.id, isDefault: customerAddresses.isDefault })
+        .from(customerAddresses)
+        .where(addressScope(request))
+        .orderBy(desc(customerAddresses.createdAt), desc(customerAddresses.id));
+      if (rows.length === 0 || rows.some((r) => r.isDefault)) return;
+      await tx.update(customerAddresses).set({ isDefault: true }).where(addressScope(request, rows[0]!.id));
+    };
+
     defineRoute(
       app,
-      { method: 'POST', url: '/me/addresses', summary: 'Add an address', tag, auth: 'customer', status: 201, body: addressBody },
+      { method: 'POST', url: '/me/addresses', summary: 'Add an address (the first one becomes the default)', tag, auth: 'customer', status: 201, body: addressBody },
       async (request, { body }) =>
         ctx.db.transaction(async (tx) => {
-          if (body.isDefault) await tx.update(customerAddresses).set({ isDefault: false }).where(addressScope(request));
+          await lockCustomer(tx, request);
+          const existing = await tx.select({ id: customerAddresses.id }).from(customerAddresses).where(addressScope(request)).limit(1);
+          const makeDefault = Boolean(body.isDefault) || existing.length === 0;
+          if (makeDefault) await tx.update(customerAddresses).set({ isDefault: false }).where(addressScope(request));
           const [address] = await tx
             .insert(customerAddresses)
-            .values({ ...body, storeId: request.store.id, customerId: request.customer!.id })
+            .values({ ...body, isDefault: makeDefault, storeId: request.store.id, customerId: request.customer!.id })
             .returning();
+          await ensureDefault(tx, request);
           return { address };
         }),
     );
@@ -310,7 +345,7 @@ export function customerStorefrontRoutes(ctx: AppContext) {
       {
         method: 'PATCH',
         url: '/me/addresses/:id',
-        summary: 'Update an address',
+        summary: 'Update an address (the default cannot be unset; choose another address as default instead)',
         tag,
         auth: 'customer',
         params: z.object({ id: z.uuid() }),
@@ -318,20 +353,30 @@ export function customerStorefrontRoutes(ctx: AppContext) {
       },
       async (request, { params, body }) =>
         ctx.db.transaction(async (tx) => {
-          if (body.isDefault) await tx.update(customerAddresses).set({ isDefault: false }).where(addressScope(request));
-          const [address] = await tx.update(customerAddresses).set(body).where(addressScope(request, params.id)).returning();
-          if (!address) throw notFound('Address');
+          await lockCustomer(tx, request);
+          const [current] = await tx.select().from(customerAddresses).where(addressScope(request, params.id));
+          if (!current) throw notFound('Address');
+          const patch: Partial<typeof customerAddresses.$inferInsert> = { ...body };
+          // Unsetting the current default would leave none, so it is ignored: another address becomes the default instead.
+          if (patch.isDefault === false && current.isDefault) delete patch.isDefault;
+          if (patch.isDefault) await tx.update(customerAddresses).set({ isDefault: false }).where(addressScope(request));
+          if (Object.keys(patch).length > 0) await tx.update(customerAddresses).set(patch).where(addressScope(request, params.id));
+          await ensureDefault(tx, request);
+          const [address] = await tx.select().from(customerAddresses).where(addressScope(request, params.id));
           return { address };
         }),
     );
 
     defineRoute(
       app,
-      { method: 'DELETE', url: '/me/addresses/:id', summary: 'Delete an address', tag, auth: 'customer', status: 204, params: z.object({ id: z.uuid() }) },
-      async (request, { params }) => {
-        const deleted = await ctx.db.delete(customerAddresses).where(addressScope(request, params.id)).returning({ id: customerAddresses.id });
-        if (deleted.length === 0) throw notFound('Address');
-      },
+      { method: 'DELETE', url: '/me/addresses/:id', summary: 'Delete an address (if it was the default, the newest remaining one becomes the default)', tag, auth: 'customer', status: 204, params: z.object({ id: z.uuid() }) },
+      async (request, { params }) =>
+        ctx.db.transaction(async (tx) => {
+          await lockCustomer(tx, request);
+          const deleted = await tx.delete(customerAddresses).where(addressScope(request, params.id)).returning({ id: customerAddresses.id });
+          if (deleted.length === 0) throw notFound('Address');
+          await ensureDefault(tx, request);
+        }),
     );
   };
 }
@@ -384,6 +429,55 @@ export function customerAdminRoutes(ctx: AppContext) {
           .where(and(eq(customerAddresses.storeId, params.storeId), eq(customerAddresses.customerId, params.id)));
         return { customer: present(customer), addresses };
       },
+    );
+
+    // Blocking is per store: customers are per store (ADR-007), so this never touches the same person in another store.
+    defineRoute(
+      app,
+      {
+        method: 'PATCH',
+        url: '/stores/:storeId/customers/:id',
+        summary: 'Block or unblock a customer of this store (blocking signs them out everywhere)',
+        tag,
+        auth: { admin: 'customers.manage' },
+        params: storeEntityParams,
+        body: z.object({ status: z.enum(['active', 'blocked']), reason: z.string().trim().min(3).max(500) }),
+      },
+      async (request, { params, body }) =>
+        ctx.db.transaction(async (tx) => {
+          // Row lock: two administrators acting at once cannot interleave a status change and its session revocation.
+          const [current] = await tx
+            .select()
+            .from(customers)
+            .where(and(eq(customers.storeId, params.storeId), eq(customers.id, params.id)))
+            .for('update');
+          if (!current) throw notFound('Customer');
+
+          let revokedSessions = 0;
+          if (current.status !== body.status) {
+            await tx.update(customers).set({ status: body.status }).where(and(eq(customers.storeId, params.storeId), eq(customers.id, params.id)));
+            if (body.status === 'blocked') {
+              // Blocking ends every live session for good: unblocking later requires a fresh sign-in.
+              const revoked = await tx
+                .update(customerSessions)
+                .set({ revokedAt: ctx.now() })
+                .where(and(eq(customerSessions.storeId, params.storeId), eq(customerSessions.customerId, params.id), isNull(customerSessions.revokedAt)))
+                .returning({ id: customerSessions.id });
+              revokedSessions = revoked.length;
+            }
+            await recordAudit(tx, {
+              storeId: params.storeId,
+              actor: actorOf(request),
+              action: body.status === 'blocked' ? 'customer.block' : 'customer.unblock',
+              entityType: 'customer',
+              entityId: params.id,
+              changes: { from: current.status, to: body.status, reason: body.reason, revokedSessions },
+            });
+          }
+          const [customer] = await tx.select({ ...publicCustomer, status: customers.status }).from(customers).where(eq(customers.id, params.id));
+          // `changed` is false when the customer was already in that state (nothing is audited then).
+          return { customer: present(customer!), changed: current.status !== body.status, revokedSessions };
+        }),
     );
   };
 }

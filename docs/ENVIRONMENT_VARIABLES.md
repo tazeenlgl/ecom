@@ -9,7 +9,7 @@ All configuration comes from the environment. It is validated at startup by `app
 | `PORT` | no | `4000` | Listen port | |
 | `LOG_LEVEL` | no | `info` | pino level (`fatal` … `trace`, `silent`) | |
 | `DATABASE_URL` | **yes** | — | PostgreSQL connection string | Secret: contains a password |
-| `TRUST_PROXY` | no | `false` | Trust `X-Forwarded-*` from a reverse proxy | Set `true` **only** behind a proxy that overwrites these headers. Otherwise clients could spoof the host ([TENANCY.md](TENANCY.md#proxies)) |
+| `TRUST_PROXY` | no | `false` | Which peers may set `X-Forwarded-For` and `X-Forwarded-Host` | `false`, a hop count (1–8), or a comma-separated list of IPs, CIDR ranges, `loopback`, `linklocal` or `uniquelocal`. Only peers in the list are believed; anything a client puts in front of the real chain is ignored. `true` trusts every peer (any caller can choose its IP and store) and is **refused in production**; use `loopback` for local development ([TENANCY.md](TENANCY.md#proxies)) |
 | `OTP_HMAC_SECRET` | in production | development value | Key for the HMAC that stores OTP codes | Secret. At least 32 characters. Production refuses the default. Rotating it invalidates outstanding codes only |
 | `CUSTOMER_SESSION_TTL_DAYS` | no | `30` | Customer session lifetime (1–365) | |
 | `ADMIN_SESSION_TTL_HOURS` | no | `12` | Admin session lifetime (1–168) | |
@@ -27,7 +27,9 @@ Used outside the app config:
 
 | Variable | Used by | Purpose |
 | --- | --- | --- |
-| `TEST_DATABASE_URL` | `apps/api/test/helpers.ts` | Test database, whose public schema is **dropped**. Default `postgres://ecom:ecom@localhost:5432/ecom_test` |
+| `TEST_DATABASE_URL` | `apps/api/test/helpers.ts` | Test database, whose public schema is **dropped**. Default `postgres://ecom:ecom@localhost:5432/ecom_test`. Setup asks the live connection for `current_database()` and refuses to drop anything unless the real name ends in `_test` |
+| `TRUSTED_PROXY_HOPS` | `apps/web`, `apps/admin` | Number of trusted reverse proxies in front of the server (0–8, default `0`). With `0`, no client IP is forwarded to the API. With `N`, the client is the Nth `X-Forwarded-For` entry from the right and must be a valid IP; the browser's own header is never copied. Set it only to the real number of proxies that overwrite or append the header, and keep the server unreachable except through them |
+| `ADMIN_API_URL` | `apps/admin` | Where the admin server reaches the API (server to server) |
 | `ADMIN_PASSWORD` | `npm run admin:create` | Password for the bootstrapped platform owner, read from the environment so it stays out of command arguments |
 
 When a real provider is approved, its credentials will be added here as new variables (for example a gateway key id, key secret and webhook secret), each validated in `env.ts`, with the live adapter selectable only by an explicit value.

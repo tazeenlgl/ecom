@@ -35,8 +35,9 @@ export function reportRoutes(ctx: AppContext) {
             .select({ day, orders: count(), totalPaise: sum(orders.totalPaise).mapWith(Number), discountPaise: sum(orders.discountPaise).mapWith(Number), refundedPaise: sum(orders.refundedPaise).mapWith(Number) })
             .from(orders)
             .where(scope)
-            .groupBy(day)
-            .orderBy(day),
+            // Group by position: the day expression binds the timezone as a parameter, and Postgres cannot match two separately-bound copies of it.
+            .groupBy(sql`1`)
+            .orderBy(sql`1`),
           ctx.db
             .select({ skuCode: orderItems.skuCode, title: orderItems.productTitle, units: sum(orderItems.quantity).mapWith(Number), revenuePaise: sum(orderItems.lineTotalPaise).mapWith(Number) })
             .from(orderItems)

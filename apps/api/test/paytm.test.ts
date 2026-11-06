@@ -214,3 +214,45 @@ describe('Paytm payments', () => {
     expect(pay.json().payment.provider).toBe('fake');
   });
 });
+
+describe('Paytm staging is refused in a production deployment', () => {
+  const config = () => ctx.app.ctx.config as { NODE_ENV: string };
+  const asProduction = async <T>(run: () => Promise<T>) => {
+    config().NODE_ENV = 'production';
+    try {
+      return await run();
+    } finally {
+      config().NODE_ENV = 'test';
+    }
+  };
+
+  it('refuses to save a staging configuration, and reports a saved one as blocked', async () => {
+    expect((await admin('PUT', `${S()}/payment-gateways/paytm`, { ...settings, enabled: true })).statusCode).toBe(200);
+    expect((await admin('GET', `${S()}/payment-gateways/paytm`)).json().paytm.blockedReason).toBeNull();
+
+    await asProduction(async () => {
+      const save = await admin('PUT', `${S()}/payment-gateways/paytm`, { ...settings, enabled: true });
+      expect(save.statusCode).toBe(409);
+      expect(save.json().error.message).toMatch(/staging/i);
+      const view = (await admin('GET', `${S()}/payment-gateways/paytm`)).json().paytm;
+      expect(view).toMatchObject({ configured: true, merchantId: MID, environment: 'staging', blockedReason: 'staging_in_production' });
+    });
+  });
+
+  it('stops offering Paytm and refuses its notifications while blocked, then works again outside production', async () => {
+    await admin('PUT', `${S()}/payment-gateways/paytm`, { ...settings, enabled: true });
+    const { order, pay } = await placeAndStartPayment('9855555555');
+    expect(pay.json().payment.provider).toBe('paytm');
+    const orderId = pay.json().payment.transactionId as string;
+    const fields = { MID, ORDERID: orderId, TXNID: `PTM_${orderId}`, TXNAMOUNT: '4500.05', CURRENCY: 'INR', STATUS: 'TXN_SUCCESS', RESPCODE: '01' };
+
+    await asProduction(async () => {
+      const second = await placeAndStartPayment('9866666666');
+      expect(second.pay.json().payment.provider).not.toBe('paytm');
+      expect((await notify(fields)).statusCode).toBe(400);
+    });
+    expect((await ctx.db.select().from(orders).where(eq(orders.id, order.id)))[0]!).toMatchObject({ status: 'pending_payment', paymentStatus: 'pending' });
+
+    expect((await notify(fields)).json().outcome).toBe('applied');
+  });
+});

@@ -22,6 +22,7 @@ export const STORE_PERMISSIONS = [
   'shipping.write',
   'content.write',
   'customers.read',
+  'customers.manage',
   'orders.read',
   'orders.manage',
   'refunds.manage',

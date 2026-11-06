@@ -26,6 +26,7 @@ All documents describe the repository as it is. Features are labelled **implemen
 | [ER_DIAGRAM.md](ER_DIAGRAM.md) | Mermaid entity relationship diagram |
 | [API.md](API.md) | API conventions, errors, pagination, endpoint index with permissions |
 | [openapi.json](openapi.json) | Generated OpenAPI 3.1 document (`npm run openapi -w @ecom/api`) |
+| [ADMIN.md](ADMIN.md) | Admin dashboard: setup, session security, endpoint-to-screen map, known gaps |
 | [SECURITY.md](SECURITY.md) | Threat model, authentication, authorization, secrets, webhooks, privacy |
 | [TENANCY.md](TENANCY.md) | Domain resolution, store context, cross-tenant protections |
 | [POS_INTEGRATION.md](POS_INTEGRATION.md) | POS ownership, port, sync, retries, unknowns |

@@ -2,14 +2,16 @@
 
 /* Brand tokens. Each store overrides these from its admin theme settings (see lib/format.ts themeStyle). */
 :root {
-  --brand-bg: #f8f6f2;
+  /* TAZEEN: plum #5B277A on warm ivory with plum-tinted neutrals. Text/background pairs are all above WCAG AA (4.5:1). */
+  --brand-bg: #fbf8f5;
   --brand-surface: #ffffff;
-  --brand-fg: #17140f;
-  --brand-muted: #6e665c;
-  --brand-line: #e6e0d6;
-  --brand-accent: #1e3a32;
+  --brand-fg: #1f1626;
+  --brand-muted: #6b6275;
+  --brand-line: #e9e1e8;
+  --brand-accent: #5b277a;
   --brand-accent-fg: #ffffff;
-  --brand-sale: #a8432a;
+  --brand-accent-soft: #f3ecf7;
+  --brand-sale: #b3204b;
 }
 
 @theme inline {
@@ -20,6 +22,7 @@
   --color-line: var(--brand-line);
   --color-accent: var(--brand-accent);
   --color-accent-fg: var(--brand-accent-fg);
+  --color-accent-soft: var(--brand-accent-soft);
   --color-sale: var(--brand-sale);
   --font-sans: var(--font-body), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-display: var(--font-heading), ui-serif, Georgia, "Times New Roman", serif;
@@ -28,19 +31,22 @@
 
 html { background: var(--brand-bg); color: var(--brand-fg); -webkit-font-smoothing: antialiased; scroll-behavior: smooth; }
 body { font-family: var(--font-sans); }
+input[aria-invalid="true"], select[aria-invalid="true"] { border-color: var(--brand-sale); }
 ::selection { background: var(--brand-accent); color: var(--brand-accent-fg); }
+:focus-visible { outline: 2px solid var(--brand-accent); outline-offset: 2px; }
+a { transition: color 0.2s; }
 
 @utility container-x { @apply mx-auto w-full max-w-[1440px] px-4 sm:px-6 lg:px-10; }
 @utility btn { @apply inline-flex items-center justify-center gap-2 rounded-full px-6 py-3 text-sm font-medium tracking-wide transition duration-300 ease-out-expo disabled:cursor-not-allowed disabled:opacity-50; }
 @utility btn-primary { @apply btn bg-accent text-accent-fg hover:brightness-110 active:scale-[0.98]; }
-@utility btn-outline { @apply btn border border-fg/20 hover:border-fg hover:bg-fg hover:text-bg; }
-@utility btn-ghost { @apply btn px-3 py-2 hover:bg-fg/5; }
-@utility field { @apply w-full rounded-xl border border-line bg-surface px-4 py-3 text-sm outline-none transition focus:border-fg/60 focus:ring-4 focus:ring-fg/5; }
+@utility btn-outline { @apply btn border border-accent/40 text-accent hover:border-accent hover:bg-accent hover:text-accent-fg; }
+@utility btn-ghost { @apply btn px-3 py-2 hover:bg-accent-soft hover:text-accent; }
+@utility field { @apply w-full rounded-xl border border-line bg-surface px-4 py-3 text-sm outline-none transition focus:border-accent focus:ring-4 focus:ring-accent/15; }
 @utility label { @apply mb-1.5 block text-xs font-medium uppercase tracking-[0.14em] text-muted; }
 @utility eyebrow { @apply text-xs font-medium uppercase tracking-[0.2em] text-muted; }
-@utility display-title { @apply font-display font-light tracking-tight; }
+@utility display-title { @apply font-display font-medium tracking-tight; }
 @utility card { @apply rounded-2xl border border-line bg-surface; }
-@utility prose-store { @apply max-w-none leading-relaxed text-fg/85 [&_a]:underline [&_h2]:mt-8 [&_h2]:font-display [&_h2]:text-2xl [&_li]:ml-5 [&_li]:list-disc [&_p]:mb-4; }
+@utility prose-store { @apply max-w-none leading-relaxed text-fg/85 [&_a]:text-accent [&_a]:underline [&_h2]:mt-8 [&_h2]:font-display [&_h2]:text-2xl [&_li]:ml-5 [&_li]:list-disc [&_p]:mb-4; }
 
 .skeleton { background: linear-gradient(90deg, var(--brand-line) 0%, color-mix(in srgb, var(--brand-line) 40%, white) 50%, var(--brand-line) 100%); background-size: 200% 100%; animation: shimmer 1.4s infinite linear; }
 @keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }

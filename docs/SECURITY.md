@@ -14,7 +14,7 @@ Status: the controls below are **implemented and tested** unless marked otherwis
 | Double charging or double ordering on retries | Idempotency keys, at most one succeeded payment per order (unique index) |
 | Secret or personal-data leaks in logs and responses | Header redaction, masked recipients, no OTP or password logging, explicit response presenters |
 | Rogue or compromised admin | Least-privilege roles, audit log, disabling an admin revokes their sessions |
-| Host header spoofing | Only verified domains resolve; `X-Forwarded-Host` is trusted only with `TRUST_PROXY=true` |
+| Host header spoofing | Only verified domains resolve; `X-Forwarded-Host` and `X-Forwarded-For` are believed only from peers listed in `TRUST_PROXY`; `TRUST_PROXY=true` is refused in production. Client IPs used for rate limits and OTP records are validated and fall back to the socket address |
 
 ## Authentication
 
@@ -90,7 +90,7 @@ Planned: the audit row does not yet store the request id or IP address.
 ## Known gaps
 
 See [KNOWN_ISSUES.md](KNOWN_ISSUES.md). The main ones:
-- Login rate limits are per process.
+- Login and coupon-guessing rate limits are per process (see KNOWN_ISSUES 20).
 - The repository is public.
 - There is no CORS allow-list yet.
 - Nothing is in place for TLS or secret storage because nothing is deployed.

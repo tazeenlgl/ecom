@@ -85,9 +85,10 @@ export function catalogueStorefrontRoutes(ctx: AppContext) {
             slug: products.slug,
             title: products.title,
             createdAt: products.createdAt,
-            minPricePaise: sql<number | null>`(select min(vp.price_paise) from ${variantPrices} vp join ${productVariants} pv on pv.id = vp.variant_id where pv.product_id = ${products.id} and pv.status = 'active')`,
-            maxMrpPaise: sql<number | null>`(select max(vp.mrp_paise) from ${variantPrices} vp join ${productVariants} pv on pv.id = vp.variant_id where pv.product_id = ${products.id} and pv.status = 'active')`,
-            imageUrl: sql<string | null>`(select pm.url from ${productMedia} pm where pm.product_id = ${products.id} and pm.kind = 'image' order by pm.position limit 1)`,
+            // The outer id must be table-qualified: drizzle renders a bare "id" in a single-table select, which would bind to the subquery's own id column.
+            minPricePaise: sql<number | null>`(select min(vp.price_paise) from ${variantPrices} vp join ${productVariants} pv on pv.id = vp.variant_id where pv.product_id = "products"."id" and pv.status = 'active')`,
+            maxMrpPaise: sql<number | null>`(select max(vp.mrp_paise) from ${variantPrices} vp join ${productVariants} pv on pv.id = vp.variant_id where pv.product_id = "products"."id" and pv.status = 'active')`,
+            imageUrl: sql<string | null>`(select pm.url from ${productMedia} pm where pm.product_id = "products"."id" and pm.kind = 'image' order by pm.position limit 1)`,
           })
           .from(products)
           .where(and(eq(products.storeId, storeId), eq(products.status, 'published'), ...filters, cursorCondition(query.cursor, products.createdAt, products.id)))

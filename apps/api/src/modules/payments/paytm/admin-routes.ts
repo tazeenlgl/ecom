@@ -9,16 +9,18 @@ import { encryptSecret } from '../../../lib/crypto.js';
 import { AppError } from '../../../lib/errors.js';
 import { defineRoute, storeParams } from '../../../lib/route.js';
 import { requireStore } from '../../platform/routes.js';
-import { PAYTM } from './config.js';
+import { PAYTM, paytmBlockedReason } from './config.js';
 
 type ConfigRow = typeof paymentGatewayConfigs.$inferSelect;
 
 /** What the API shows about a store's Paytm settings. The merchant key is never returned. */
-const present = (row: ConfigRow | undefined) =>
+const present = (row: ConfigRow | undefined, blockedReason: ReturnType<typeof paytmBlockedReason> = null) =>
   row
     ? {
         configured: true,
         enabled: row.enabled,
+        // Why a saved configuration cannot take payments in this deployment (null when it can).
+        blockedReason,
         environment: row.environment,
         merchantId: row.merchantId,
         websiteName: row.websiteName,
@@ -43,6 +45,7 @@ export function paytmAdminRoutes(ctx: AppContext) {
   return async (app: FastifyInstance) => {
     const tag = 'Admin: payments';
     const url = '/stores/:storeId/payment-gateways/paytm';
+    const view = (row: ConfigRow | undefined) => present(row, row ? paytmBlockedReason(ctx.config, row.environment === 'production' ? 'production' : 'staging') : null);
     const load = (db: DbOrTx, storeId: string) =>
       db
         .select()
@@ -55,7 +58,7 @@ export function paytmAdminRoutes(ctx: AppContext) {
       { method: 'GET', url, summary: 'Paytm settings for the store (the merchant key is never returned)', tag, auth: { admin: 'store.settings.manage' }, params: storeParams },
       async (_request, { params }) => {
         await requireStore(ctx.db, params.storeId);
-        return { paytm: present(await load(ctx.db, params.storeId)) };
+        return { paytm: view(await load(ctx.db, params.storeId)) };
       },
     );
 
@@ -77,6 +80,9 @@ export function paytmAdminRoutes(ctx: AppContext) {
         return ctx.db.transaction(async (tx) => {
           await requireStore(tx, params.storeId);
           const existing = await load(tx, params.storeId);
+          if (paytmBlockedReason(ctx.config, body.environment ?? (existing?.environment === 'production' ? 'production' : 'staging')) === 'staging_in_production') {
+            throw new AppError(409, 'conflict', 'Paytm staging cannot be used in a production deployment.');
+          }
           if (!existing && !body.merchantKey) throw new AppError(400, 'invalid_request', 'merchantKey is required the first time Paytm is configured.');
           const values = {
             merchantId: body.merchantId,
@@ -101,7 +107,7 @@ export function paytmAdminRoutes(ctx: AppContext) {
             entityId: row!.id,
             changes: { ...changes, merchantKeyChanged: Boolean(body.merchantKey) },
           });
-          return { paytm: present(row) };
+          return { paytm: view(row) };
         });
       },
     );

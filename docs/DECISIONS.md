@@ -116,3 +116,31 @@ Each record gives the context, the decision, its consequences and its status. Da
 - **Decision:** migration `0002` rejects updates and deletes on `order_items`, and changes to the snapshot and money columns of `orders`.
 - **Consequences:** history cannot be rewritten by a bug or a manual query without dropping the trigger. Corrections are new rows.
 - **Status:** accepted.
+
+## ADR-016: A customer with addresses always has exactly one default (2026-11-05)
+
+- **Context:** the database already forbade two defaults (partial unique index) but allowed none, so a first address or the deletion of the default left the customer without one.
+- **Decision:** address writes lock the customer row, then keep the rule "one default if any address exists": the first address is the default, deleting the default promotes the newest remaining address (by `created_at`, then `id`), and `isDefault: false` on the current default is ignored (the customer makes another address the default). Customers saved before this rule are repaired on their next address write. No migration.
+- **Consequences:** `DELETE` stays `204`; clients reload the list to see the new default. Orders keep their own address snapshot, so deleting an address never changes an order.
+- **Status:** accepted.
+
+## ADR-017: A wrong current password is 422, not 401 (2026-11-05)
+
+- **Context:** `PUT /me/password` answered 401 for a wrong current password. The storefront proxy clears the session cookie on any 401 for a signed-in browser, so a typo signed the customer out.
+- **Decision:** answer `422 invalid_request` with `details.field = "currentPassword"`. 401 stays reserved for a missing, expired or revoked session.
+- **Consequences:** one documented contract change; no client depended on it. The attempt is still limited by the route's rate limiter.
+- **Status:** accepted.
+
+## ADR-018: Staging payments never run in production; online refunds are settled by hand until Paytm's refund result is verified (2026-11-05)
+
+- **Context:** the audit found that a store could enable Paytm staging in a production deployment, where a staging "success" would confirm real orders, and that online refunds stayed `processing` forever because the refund-status contract is unverified.
+- **Decision:** `NODE_ENV=production` refuses Paytm staging (save, use and notifications). Online refunds in `processing` can be confirmed or failed by an administrator with `refunds.manage`, with an audit entry; nothing is guessed about Paytm's refund status API. A payment still unconfirmed after its order was cancelled is closed as `cancelled`, and a later success is still recorded and refunded.
+- **Consequences:** refund completion relies on a person checking the Paytm dashboard until the refund contract is verified on staging. A wrong manual confirmation changes the order's refunded amount.
+- **Status:** accepted. Supersede when a verified refund status mechanism exists.
+
+## ADR-019: Manual refund settlement needs the provider's refund id, and a failure holds the money for a day (2026-11-05)
+
+- **Context:** a review found that a refund wrongly marked failed by staff would free its money, so the same amount could be refunded twice, and that a wrong mark could not be undone.
+- **Decision:** manual confirmation and failure require the provider's refund id to be entered back. A failed refund the provider had accepted keeps its money unavailable for 24 hours. During that time, and after, a refund marked failed can be corrected to paid, unless that would take the order above its total. Every step is audited and none overwrites an earlier one. Abandoned payment attempts are checked with the provider for 48 hours after creation.
+- **Consequences:** a genuine failure delays a retry by up to 24 hours. Who settled a refund, when and with what reference is stored on the refund row.
+- **Status:** accepted. The settlement metadata is stored on the refund row (migration 0004, approved 2026-11-05).

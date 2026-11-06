@@ -29,7 +29,7 @@ Hostnames are globally unique (`store_domains.hostname` UNIQUE), so resolution i
 
 ### Proxies
 
-`request.host` honours `X-Forwarded-Host` only when `TRUST_PROXY=true`. Enable this only behind a proxy that overwrites the header. Otherwise a client could choose its store by sending the header. See [DEPLOYMENT.md](DEPLOYMENT.md).
+`request.host` honours `X-Forwarded-Host` only when the connecting peer is trusted by `TRUST_PROXY` (an IP/CIDR list or hop count; `true` trusts everyone and is for local development only). A peer outside the list cannot choose its store with that header. See [DEPLOYMENT.md](DEPLOYMENT.md).
 
 ## Domain verification
 

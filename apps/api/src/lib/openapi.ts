@@ -44,7 +44,7 @@ export function buildOpenApi(routes: RouteDoc[]) {
     if (typeof r.auth === 'object') notes.push(r.auth.admin ? `Requires permission \`${r.auth.admin}\`${path.includes('{storeId}') ? ' for the store in the path' : ''}.` : 'Requires any signed-in admin.');
     if (r.auth === 'customer') notes.push('Requires a signed-in customer of the resolved store.');
     if (r.idempotencyKey) notes.push('Requires an `Idempotency-Key` header (8-128 chars).');
-    if (r.rateLimited) notes.push('Rate limited per client IP.');
+    if (r.rateLimited) notes.push(r.rateLimitNote ?? 'Rate limited per client IP.');
 
     const headerParams = [
       ...(r.idempotencyKey ? [{ name: 'Idempotency-Key', in: 'header', required: true, schema: { type: 'string', minLength: 8, maxLength: 128 } }] : []),

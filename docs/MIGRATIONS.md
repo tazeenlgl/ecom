@@ -10,6 +10,7 @@ Migrations live in `apps/api/drizzle/`, are recorded in `drizzle/meta/_journal.j
 | 0001 | `0001_commerce_core.sql` | generated | 38 new tables and their enums, indexes and constraints. Adds columns `stores.config`, `stores.pos_location_ref` and `store_domains.verification_token`. **Additive only**: no drops, renames or type changes to `0000` objects |
 | 0002 | `0002_order_snapshots_immutable.sql` | hand-written | Trigger functions and triggers that make order snapshots immutable ([DATABASE.md](DATABASE.md#immutability)) |
 | 0003 | `0003_paytm_gateway_config.sql` | generated | `payment_gateway_configs`: per-store gateway credentials, with the key encrypted. Additive |
+| 0004 | `0004_refund_settlement.sql` | generated | `refunds`: nullable settlement columns (`settlement_source`, `settled_by_type`, `settled_by_id`, `settled_at`, `settlement_reference`, `settlement_note`) and the check `refunds_settlement_source_ck` (`provider` or `manual`). Additive; existing rows keep NULLs. Tested on top of pre-existing refund rows in `apps/api/test/refund-settlement-migration.test.ts` |
 
 Applied so far only to local and test databases. **No migration has been run against any shared or production database.**
 

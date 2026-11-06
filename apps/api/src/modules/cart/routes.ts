@@ -3,7 +3,9 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import type { AppContext } from '../../context.js';
 import { cartItems, carts, products, productVariants } from '../../db/schema.js';
+import { clientIp } from '../../lib/client-ip.js';
 import { AppError, notFound } from '../../lib/errors.js';
+import { RateLimiter } from '../../lib/rate-limit.js';
 import { defineRoute } from '../../lib/route.js';
 import { buildQuote, presentQuote } from '../checkout/quote.js';
 import { optionalCustomer } from '../customers/routes.js';
@@ -15,7 +17,16 @@ const pincodeQuery = z.object({ pincode: z.string().regex(/^[1-9]\d{5}$/).option
  * Cart endpoints work for guests (X-Cart-Token header) and signed-in customers
  * (bearer token). Responses always carry a freshly computed server-side quote.
  */
+export const COUPON_FAILURES_PER_CART = 10;
+export const COUPON_FAILURES_PER_IP = 30;
+const COUPON_WINDOW_MS = 15 * 60_000;
+
 export function cartRoutes(ctx: AppContext) {
+  // Only failed coupon attempts are counted, so switching between valid codes is never penalised. In-process (see RateLimiter).
+  const clock = () => ctx.now().getTime();
+  const couponCartLimiter = new RateLimiter(COUPON_FAILURES_PER_CART, COUPON_WINDOW_MS, clock);
+  const couponIpLimiter = new RateLimiter(COUPON_FAILURES_PER_IP, COUPON_WINDOW_MS, clock);
+
   return async (app: FastifyInstance) => {
     const tag = 'Storefront: cart';
 
@@ -129,13 +140,24 @@ export function cartRoutes(ctx: AppContext) {
         summary: 'Apply a coupon code (validated on every quote)',
         tag,
         auth: 'public',
+        rateLimited: true,
+        rateLimitNote: `Failed attempts are limited to ${COUPON_FAILURES_PER_CART} per cart and ${COUPON_FAILURES_PER_IP} per client IP every 15 minutes (429 \`rate_limited\`); successful applications do not count.`,
         body: z.object({ code: z.string().trim().min(1).max(40).regex(/^[A-Za-z0-9_-]+$/) }),
       },
       async (request, { body }) => {
+        const ip = clientIp(request);
+        couponIpLimiter.guard(ip);
         await optionalCustomer(ctx, request);
         const cart = await requireCart(request);
+        // Refuse before touching the cart once either allowance of failed guesses is used up.
+        couponCartLimiter.guard(cart.id);
         const [updated] = await ctx.db.update(carts).set({ couponCode: body.code.toUpperCase() }).where(eq(carts.id, cart.id)).returning();
         const result = await view(request, updated!);
+        // A code that does not exist, is expired, exhausted or does not fit the cart counts as a failed guess.
+        if (result.quote.coupon && result.quote.coupon.status !== 'applied') {
+          couponCartLimiter.hit(cart.id);
+          couponIpLimiter.hit(ip);
+        }
         if (result.quote.coupon?.status === 'invalid') {
           await ctx.db.update(carts).set({ couponCode: null }).where(eq(carts.id, cart.id));
           throw new AppError(422, 'coupon_invalid', result.quote.coupon.message ?? 'This coupon is not valid.');

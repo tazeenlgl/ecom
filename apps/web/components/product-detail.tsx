@@ -110,7 +110,7 @@ export function ProductDetail({ product }: { product: Product }) {
             {off > 0 && (
               <>
                 <span className="text-muted line-through">{money(variant!.mrpPaise)}</span>
-                <span className="rounded-full bg-sale/10 px-2 py-0.5 text-xs font-medium text-sale">{off}% off</span>
+                <span className="rounded-full bg-accent-soft px-2 py-0.5 text-xs font-medium text-accent">{off}% off</span>
               </>
             )}
           </div>
@@ -138,9 +138,9 @@ export function ProductDetail({ product }: { product: Product }) {
                         key={value}
                         onClick={() => setSelected((s) => ({ ...s, [code]: value }))}
                         aria-pressed={on}
-                        className={`relative min-w-12 rounded-full border px-4 py-2.5 text-sm transition ${on ? 'border-fg' : 'border-line hover:border-fg/50'} ${ok ? '' : 'text-muted line-through decoration-muted/60'}`}
+                        className={`relative min-w-12 rounded-full border px-4 py-2.5 text-sm transition ${on ? 'border-accent text-accent' : 'border-line hover:border-accent/50'} ${ok ? '' : 'text-muted line-through decoration-muted/60'}`}
                       >
-                        {on && <motion.span layoutId={`opt-${code}`} className="absolute inset-0 -z-10 rounded-full bg-fg/5" />}
+                        {on && <motion.span layoutId={`opt-${code}`} className="absolute inset-0 -z-10 rounded-full bg-accent-soft" />}
                         {value}
                       </button>
                     );

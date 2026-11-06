@@ -1,7 +1,7 @@
 import { sql } from 'drizzle-orm';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import { buildApp } from '../src/app.js';
-import { testConfig } from '../src/config/env.js';
+import { testConfig, type Config } from '../src/config/env.js';
 import { createDatabase, type Database } from '../src/db/client.js';
 import { migrationsFolder } from '../src/db/migrate.js';
 import { adminRoleAssignments, adminUsers, brands, storeDomains, stores } from '../src/db/schema.js';
@@ -12,6 +12,7 @@ import { paytmConfigFromDb } from '../src/modules/payments/paytm/config.js';
 import { PaytmPaymentProvider } from '../src/modules/payments/paytm/provider.js';
 import type { PaymentProvider } from '../src/modules/payments/provider.js';
 import type { PosGateway } from '../src/modules/pos/gateway.js';
+import { assertDisposableDatabase } from './support/disposable-db.js';
 import { UnconfiguredPosGateway } from '../src/modules/pos/unconfigured-gateway.js';
 
 const TEST_DATABASE_URL = process.env.TEST_DATABASE_URL ?? 'postgres://ecom:ecom@localhost:5432/ecom_test';
@@ -30,8 +31,15 @@ export class FakeDns {
  * External integrations are fakes: log-only messages, FakePaymentProvider,
  * FakeDns, and the given POS gateway (unconfigured by default).
  */
-export async function setupTestApp(options: { pos?: PosGateway; paytmFetch?: typeof fetch } = {}) {
+export async function setupTestApp(options: { pos?: PosGateway; paytmFetch?: typeof fetch; config?: Partial<Config> } = {}) {
   const { db, pool } = createDatabase(TEST_DATABASE_URL);
+  try {
+    // Never wipe a database that is not provably disposable (checked against the live connection).
+    await assertDisposableDatabase(db);
+  } catch (err) {
+    await pool.end();
+    throw err;
+  }
   await db.execute(sql`drop schema if exists public cascade; drop schema if exists drizzle cascade; create schema public;`);
   await migrate(db, { migrationsFolder });
 
@@ -39,7 +47,7 @@ export async function setupTestApp(options: { pos?: PosGateway; paytmFetch?: typ
   const payment = new FakePaymentProvider(WEBHOOK_SECRET);
   const dns = new FakeDns();
   const clock = { offsetMs: 0 };
-  const config = testConfig({ PAYMENT_PROVIDER: 'fake', FAKE_PAYMENT_WEBHOOK_SECRET: WEBHOOK_SECRET });
+  const config = testConfig({ PAYMENT_PROVIDER: 'fake', FAKE_PAYMENT_WEBHOOK_SECRET: WEBHOOK_SECRET, ...options.config });
   // Paytm never reaches the network in tests: calls go to `paytmFetch` (or fail).
   const noNetwork = (async () => {
     throw new Error('network disabled in tests');
@@ -107,7 +115,7 @@ export function lastOtp(ctx: TestContext, phone: string): string {
 
 /** Signs a customer in with OTP on `host`; returns the session token. */
 export async function customerToken(ctx: TestContext, host: string, phone: string, headers: Record<string, string> = {}) {
-  const req = await ctx.app.inject({ method: 'POST', url: '/v1/storefront/auth/otp/request', headers: { host }, payload: { phone } });
+  const req = await ctx.app.inject({ method: 'POST', url: '/v1/storefront/auth/otp/request', headers: { host, ...headers }, payload: { phone } });
   if (req.statusCode !== 200) throw new Error(`otp request failed: ${req.body}`);
   const { challengeId } = req.json();
   const e164 = `+91${phone.replace(/\D/g, '').slice(-10)}`;

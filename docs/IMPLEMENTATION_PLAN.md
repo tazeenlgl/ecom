@@ -11,6 +11,8 @@ Status as of 2026-10-19. Each phase needs the user's approval before it starts.
 | Backend and database | All modules in [ARCHITECTURE.md](ARCHITECTURE.md), migrations `0001` and `0002`, 117 API operations, worker | branch `claude/project-thread-4t2912`, [TESTING.md](TESTING.md) (97 tests) |
 | Knowledge base | `docs/`, `README.md`, `CLAUDE.md`, `CHANGELOG.md` | this folder |
 | Paytm adapter (partial) | Per-store encrypted credentials, initiate, notification, status, refund | [PAYMENTS.md](PAYMENTS.md#paytm). Needs a staging test with a real test MID and key |
+| Payment safety (**implemented**, uncommitted) | Staging Paytm refused in production, admin Payments card fix, manual settlement of online refunds in processing, ordered and fault-tolerant reconciliation, abandoned-payment closing, no confirmation after the payment window | API tests pass on a disposable database (see [CHANGELOG.md](../CHANGELOG.md)). Paytm refund status and the live contract stay **blocked** on a staging account ([KNOWN_ISSUES.md](KNOWN_ISSUES.md)) |
+| Customer account, phase 1 (**implemented**, uncommitted) | Password set/change/reset UI, `PATCH /me` fix, wrong-current-password status, cancel dialog with refund preview, shared accessible dialog, address default rules. Details in [CHANGELOG.md](../CHANGELOG.md) | API tests written but **not yet run** (no test database); web tests pass; manual browser checklist pending |
 
 ## Next (proposed order)
 
@@ -33,9 +35,11 @@ Pick what the business needs from [KNOWN_ISSUES.md](KNOWN_ISSUES.md):
 - **Depends on:** a CORS decision and a domain for a staging store.
 - **Acceptance:** works on mobile, fails safely when stock is unknown, never sends prices as authoritative, accessibility basics.
 
-### 4. Admin UI
+### 4. Admin UI (first release built in `apps/admin`; see [ADMIN.md](ADMIN.md))
 - **Scope:** store setup, catalogue and prices, promotions, orders and fulfillment, refunds, returns, POS status and recovery, jobs, audit.
-- **Acceptance:** every action maps to an existing permission-checked endpoint.
+- **Built:** sign-in with a server-side session (BFF, httpOnly cookie, CSRF), store selector limited to authorised stores, platform brands/stores/administrators, store dashboard, products with variants, prices and photos, categories, collections, promotions and coupons, orders with fulfilment, returns and refunds, customers, pages and blocks, shipping zones, store settings and domains, POS status, jobs, audit history, sales report.
+- **Next:** size charts, attributes and specifications, promotion eligibility, Paytm credential entry, payment reconciliation, and the API gaps listed in [ADMIN.md](ADMIN.md#not-built-and-api-gaps).
+- **Acceptance:** every action maps to an existing permission-checked endpoint. Met for everything built; `apps/admin/test/e2e-roles.mjs` checks four roles and cross-store access.
 
 ### 5. Provider integrations (each needs explicit approval)
 - **POS:** after the API is verified. See [POS_INTEGRATION.md](POS_INTEGRATION.md#what-is-needed-to-build-the-adapter).

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { parseTrustProxy } from './trust-proxy.js';
 
 const booleanString = z
   .enum(['true', 'false'])
@@ -17,7 +18,18 @@ const envSchema = z
     PORT: z.coerce.number().int().positive().default(4000),
     LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
     DATABASE_URL: z.string().min(1),
-    TRUST_PROXY: booleanString,
+    // Which peers may set X-Forwarded-For / -Host: false | true (dev only) | hop count | IP/CIDR list. See trust-proxy.ts.
+    TRUST_PROXY: z
+      .string()
+      .default('false')
+      .transform((value, ctx) => {
+        try {
+          return parseTrustProxy(value);
+        } catch (err) {
+          ctx.addIssue({ code: 'custom', message: err instanceof Error ? err.message : 'invalid value' });
+          return z.NEVER;
+        }
+      }),
 
     // Keys the HMAC that stores OTP codes. At least 32 characters.
     OTP_HMAC_SECRET: z.string().min(32).default(DEV_OTP_SECRET),
@@ -55,6 +67,9 @@ const envSchema = z
     }
     if (env.PAYMENT_PROVIDER === 'fake') {
       ctx.addIssue({ code: 'custom', path: ['PAYMENT_PROVIDER'], message: '"fake" is not allowed in production' });
+    }
+    if (env.TRUST_PROXY === true) {
+      ctx.addIssue({ code: 'custom', path: ['TRUST_PROXY'], message: '"true" trusts every peer and is not allowed in production; list the proxy addresses (IPs or CIDR ranges) or a hop count' });
     }
   })
   .superRefine((env, ctx) => {

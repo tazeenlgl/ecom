@@ -6,6 +6,7 @@ import type { Actor } from '../../lib/audit.js';
 import { AppError, notFound } from '../../lib/errors.js';
 import { enqueueJob } from '../jobs/queue.js';
 import { createRefund } from '../payments/service.js';
+import { cancelRefundPaise } from './eligibility.js';
 import { assertTransition, type StateOf } from './state-machines.js';
 
 export type Order = typeof orders.$inferSelect;
@@ -122,9 +123,9 @@ export async function cancelOrder(ctx: AppContext, tx: Tx, order: Order, actor: 
     .update(promotionRedemptions)
     .set({ voidedAt: ctx.now() })
     .where(and(eq(promotionRedemptions.orderId, order.id), eq(promotionRedemptions.storeId, order.storeId)));
-  if (updated.paymentStatus === 'paid') {
+  if (cancelRefundPaise(updated) > 0) {
     await createRefund(ctx, tx, updated, {
-      amountPaise: updated.totalPaise - updated.refundedPaise,
+      amountPaise: cancelRefundPaise(updated),
       reason: `Order cancelled: ${reason}`,
       idempotencyKey: `cancel:${updated.id}`,
       actor,

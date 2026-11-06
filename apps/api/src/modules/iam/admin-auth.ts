@@ -1,10 +1,11 @@
 import { and, eq, gt, isNull } from 'drizzle-orm';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
+import { clientIp } from '../../lib/client-ip.js';
 import type { AppContext } from '../../context.js';
 import { adminRoleAssignments, adminSessions, adminUsers } from '../../db/schema.js';
 import { recordAudit } from '../../lib/audit.js';
-import { DUMMY_PASSWORD_HASH, newToken, sha256, verifyPassword } from '../../lib/crypto.js';
+import { DUMMY_PASSWORD_HASH, hmacSha256, newToken, sha256, verifyPassword } from '../../lib/crypto.js';
 import { AppError } from '../../lib/errors.js';
 import { RateLimiter } from '../../lib/rate-limit.js';
 import { defineRoute } from '../../lib/route.js';
@@ -61,8 +62,13 @@ export function adminAuthenticator(ctx: AppContext) {
 }
 
 export function adminAuthRoutes(ctx: AppContext) {
-  const loginLimiter = new RateLimiter(10, 15 * 60_000);
-  const emailLimiter = new RateLimiter(5, 15 * 60_000);
+  // Sign-in limits (in-process, see RateLimiter): 10 attempts per client IP and 5 per account, every 15 minutes.
+  // The account counter applies to any email, existing or not, so a 429 never reveals whether an account exists.
+  const clock = () => ctx.now().getTime();
+  const loginLimiter = new RateLimiter(10, 15 * 60_000, clock);
+  const emailLimiter = new RateLimiter(5, 15 * 60_000, clock);
+  /** Keyed by a keyed hash of the normalised email, so no address is held in memory as a key and case variants share a bucket. */
+  const accountKey = (email: string) => hmacSha256(ctx.config.OTP_HMAC_SECRET, `admin-login:${email.normalize('NFKC').trim().toLowerCase()}`);
 
   return async (app: FastifyInstance) => {
     defineRoute(
@@ -78,14 +84,15 @@ export function adminAuthRoutes(ctx: AppContext) {
       },
       async (request, { body }) => {
         const email = body.email.toLowerCase();
-        emailLimiter.consume(email);
+        const limitKey = accountKey(email);
+        emailLimiter.consume(limitKey);
         const [admin] = await ctx.db.select().from(adminUsers).where(eq(adminUsers.email, email)).limit(1);
         // Always run one scrypt so response time does not reveal whether the email exists.
         const ok = await verifyPassword(body.password, admin?.passwordHash ?? DUMMY_PASSWORD_HASH);
         if (!admin || !ok || admin.status !== 'active') {
           throw new AppError(401, 'unauthenticated', 'Email or password is incorrect.');
         }
-        emailLimiter.reset(email);
+        emailLimiter.reset(limitKey);
         const token = newToken();
         const expiresAt = new Date(ctx.now().getTime() + ctx.config.ADMIN_SESSION_TTL_HOURS * 3_600_000);
         await ctx.db.transaction(async (tx) => {
@@ -97,7 +104,7 @@ export function adminAuthRoutes(ctx: AppContext) {
             action: 'admin.login',
             entityType: 'admin_user',
             entityId: admin.id,
-            changes: { ip: request.ip },
+            changes: { ip: clientIp(request) },
           });
         });
         return { token, expiresAt, admin: { id: admin.id, email: admin.email, name: admin.name } };
