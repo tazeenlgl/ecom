@@ -171,6 +171,9 @@ export function ProductDetail({ product }: { product: Product }) {
                     'Select options'
                   ) : canBuy ? (
                     'Add to bag'
+                  ) : variant.stock === 'unknown' ? (
+                    // The POS has not reported this SKU: say so rather than claim it is sold out.
+                    'Availability not confirmed'
                   ) : (
                     'Currently unavailable'
                   )}

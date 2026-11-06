@@ -2,7 +2,7 @@
 
 Dates are when the change was committed. Nothing has been deployed.
 
-## 2026-11-06: Product SEO correctness (R1) and image host restriction (R2) (uncommitted)
+## 2026-11-06: Product SEO correctness (R1) and image host restriction (R2)
 
 Plan and decisions: `docs/product-management/`. No migration. Nothing deployed.
 
@@ -11,6 +11,7 @@ Changed (R1, storefront SEO):
 - The product page emits a canonical link, `robots: noindex,nofollow` when not indexable, Open Graph (SEO title, description, `og:url`, image with size and alt) and Twitter card, one JSON-LD `Offer` per variant, and breadcrumb JSON-LD. **Availability is stated only when the POS reported the stock; unknown stock no longer becomes `OutOfStock`.**
 - The meta description is built from whole sentences up to 155 characters and is omitted rather than cut mid-sentence. An admin-written SEO description is used as written.
 - The sitemap uses the update time for `lastmod` and leaves out `noIndex` products. `seo.canonicalUrl` must now be https.
+- The product page button says "Availability not confirmed" (still disabled) for a variant the POS has not reported, instead of "Currently unavailable".
 - Behaviour change to expect: a store with no verified primary domain gets no canonical and its product pages are `noindex`.
 
 Changed (R2, image hosts):
@@ -19,7 +20,7 @@ Changed (R2, image hosts):
 - Known gap: Next.js 15.5.29 follows redirects and has no private-address check, so an allowed host that redirects elsewhere is not blocked. Allow only hosts you trust that do not redirect.
 - Tests: `catalogue-seo`, `storefront-seo-baseline`, `media-hosts` (API); `storefront-seo-baseline`, `media-hosts` (web); the web test config now compiles JSX so page modules can be imported.
 
-## 2026-11-05: PR #3 review corrections H1 and H2 (uncommitted)
+## 2026-11-05: PR #3 review corrections H1 and H2
 
 Changed:
 - Payment reconciliation moves a checked payment to the back of the queue with the database clock (`clock_timestamp()`, microseconds, like `created_at`) instead of a millisecond `new Date()`. Two rows handled in the same millisecond used to tie, and the random id decided their order, which failed `payment-safety.test.ts` in CI (reproduced locally in 4 of 12 runs). Which payments are selected, and the order (`updated_at`, then id), are unchanged.

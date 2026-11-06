@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { seoSchema } from '../src/lib/route.js';
 import { breadcrumbChain, canonicalProductUrl, metaDescription, plainText, sentences, stockState } from '../src/modules/catalogue/seo.js';
 
 describe('stockState', () => {
@@ -62,6 +63,15 @@ describe('canonicalProductUrl', () => {
     expect(canonicalProductUrl({ ...base, override: 'https://alias.example.com/p/other/' })).toBe('https://alias.example.com/p/other');
     for (const bad of ['https://elsewhere.example/p/x', 'http://alias.example.com/p/x', 'https://alias.example.com/p/x?utm=1', 'https://alias.example.com/p/x#a', 'https://u:p@alias.example.com/p/x', 'javascript:alert(1)', 'not a url']) {
       expect(canonicalProductUrl({ ...base, override: bad }), bad).toBe('https://shop.example.com/p/kurta');
+    }
+  });
+});
+
+describe('seoSchema canonical address (shared by products, categories, collections and pages)', () => {
+  it('accepts https and refuses every other scheme', () => {
+    expect(seoSchema.safeParse({ canonicalUrl: 'https://shop.example.com/p/x' }).success).toBe(true);
+    for (const bad of ['http://shop.example.com/p/x', 'javascript:alert(1)', 'data:text/html,x', 'ftp://x.example/p']) {
+      expect(seoSchema.safeParse({ canonicalUrl: bad }).success, bad).toBe(false);
     }
   });
 });
