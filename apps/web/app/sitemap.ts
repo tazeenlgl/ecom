@@ -2,7 +2,7 @@ import type { MetadataRoute } from 'next';
 import { api, storeHost } from '@/lib/server-api';
 import type { Category, Collection, Page, ProductSummary } from '@/lib/types';
 
-/** Per-store sitemap: the host decides which store's catalogue is listed. */
+/** Per-store sitemap: the host decides which store's catalogue is listed. Products hidden from search engines are left out. */
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const base = `https://${await storeHost()}`;
   const [categories, collections] = await Promise.all([api<{ items: Category[] }>('categories'), api<{ items: Collection[] }>('collections')]);
@@ -18,6 +18,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${base}/shop`, changeFrequency: 'daily' },
     ...categories.items.map((c) => ({ url: `${base}/c/${c.slug}` })),
     ...collections.items.map((c) => ({ url: `${base}/collections/${c.slug}` })),
-    ...products.map((p) => ({ url: `${base}/p/${p.slug}`, lastModified: p.createdAt })),
+    ...products.filter((p) => !p.noIndex).map((p) => ({ url: `${base}/p/${p.slug}`, lastModified: p.updatedAt })),
   ];
 }

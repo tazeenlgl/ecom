@@ -33,6 +33,8 @@ export type ProductSummary = {
   slug: string;
   title: string;
   createdAt: string;
+  updatedAt: string;
+  noIndex: boolean;
   minPricePaise: number | null;
   maxMrpPaise: number | null;
   imageUrl: string | null;
@@ -49,6 +51,8 @@ export type Variant = {
   mrpPaise: number;
   pricePaise: number;
   inStock: boolean;
+  /** Tri-state from the POS cache; 'unknown' means the POS never reported this SKU. */
+  stock: 'in_stock' | 'out_of_stock' | 'unknown';
 };
 
 export type SizeChart = { name: string; chart: unknown; notes: string | null };
@@ -61,6 +65,10 @@ export type Product = {
   specifications: unknown;
   attributes: { code: string; label: string; value: unknown }[];
   seo: Seo;
+  canonicalUrl: string | null;
+  indexable: boolean;
+  metaDescription: string | null;
+  breadcrumbs: { name: string; slug: string }[];
   sizeChart: SizeChart | null;
   media: Media[];
   variants: Variant[];

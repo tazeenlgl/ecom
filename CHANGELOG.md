@@ -2,6 +2,17 @@
 
 Dates are when the change was committed. Nothing has been deployed.
 
+## 2026-11-06: Product SEO correctness (R1) (uncommitted)
+
+Plan and decisions: `docs/product-management/`. No migration. Nothing deployed.
+
+Changed:
+- The storefront product response now carries a resolved `canonicalUrl` (the store's primary verified domain; an admin canonical is honoured only on a verified domain of the same store, over https), `indexable`, `metaDescription`, `breadcrumbs`, and a per-variant tri-state `stock` (`in_stock` | `out_of_stock` | `unknown`; `inStock` stays). The product list carries `updatedAt` and `noIndex`.
+- The product page emits a canonical link, `robots: noindex,nofollow` when not indexable, Open Graph (SEO title, description, `og:url`, image with size and alt) and Twitter card, one JSON-LD `Offer` per variant, and breadcrumb JSON-LD. **Availability is stated only when the POS reported the stock; unknown stock no longer becomes `OutOfStock`.**
+- The meta description is built from whole sentences up to 155 characters and is omitted rather than cut mid-sentence. An admin-written SEO description is used as written.
+- The sitemap uses the update time for `lastmod` and leaves out `noIndex` products. `seo.canonicalUrl` must now be https.
+- Behaviour change to expect: a store with no verified primary domain gets no canonical and its product pages are `noindex`.
+- Tests: `catalogue-seo` and `storefront-seo-baseline` (API); `storefront-seo-baseline` (web). The web test config now compiles JSX so page modules can be imported.
 ## 2026-11-05: PR #3 review corrections H1 and H2 (uncommitted)
 
 Changed:

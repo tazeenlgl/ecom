@@ -166,7 +166,7 @@ export const seoSchema = z
   .object({
     title: z.string().max(200).optional(),
     description: z.string().max(500).optional(),
-    canonicalUrl: z.url().max(500).optional(),
+    canonicalUrl: z.url({ protocol: /^https$/ }).max(500).optional(),
     noIndex: z.boolean().optional(),
   })
   .strict();
