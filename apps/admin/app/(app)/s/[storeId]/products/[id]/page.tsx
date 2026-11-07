@@ -14,7 +14,7 @@ import { ProductForm } from '../product-form';
 type Variant = { id: string; skuCode: string; title: string; options: Record<string, string>; status: 'active' | 'inactive'; position: number; price: { mrpPaise: number; pricePaise: number } | null };
 type Media = { id: string; kind: 'image' | 'video'; url: string; altText: string | null; width: number | null; height: number | null; position: number };
 type Detail = {
-  product: { id: string; slug: string; title: string; description: string | null; status: 'draft' | 'published' | 'archived'; taxRateBps: number; hsnCode: string | null; sizeChartId: string | null; updatedAt: string };
+  product: { id: string; slug: string; title: string; description: string | null; status: 'draft' | 'published' | 'archived'; taxRateBps: number; hsnCode: string | null; sizeChartId: string | null; attributes: Record<string, string | number | boolean>; updatedAt: string };
   categoryIds: string[];
   variants: Variant[];
   media: Media[];

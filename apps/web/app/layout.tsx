@@ -6,7 +6,7 @@ import { AnnouncementBar } from '@/components/announcement-bar';
 import { CartDrawer } from '@/components/cart-drawer';
 import { CartProvider } from '@/components/cart-provider';
 import { Header } from '@/components/header';
-import { themeStyle } from '@/lib/format';
+import { layoutStyle, themeStyle } from '@/lib/format';
 import { ApiError } from '@/lib/errors';
 import { getCustomer, getNavigation, getStore, pageExists } from '@/lib/server-api';
 import './globals.css';
@@ -57,7 +57,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
   const { settings } = store;
 
   return (
-    <html lang={store.locale?.split('-')[0] || 'en'} className={`${body.variable} ${heading.variable}`} style={themeStyle(settings.theme)} data-variant={settings.theme?.variant}>
+    <html lang={store.locale?.split('-')[0] || 'en'} className={`${body.variable} ${heading.variable}`} style={{ ...themeStyle(settings.theme), ...layoutStyle(settings.layout) }} data-variant={settings.theme?.variant}>
       <body className="min-h-dvh">
         <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[60] focus:rounded focus:bg-fg focus:px-4 focus:py-2 focus:text-bg">
           Skip to content

@@ -10,6 +10,14 @@ export const publicSettingsSchema = z
     logoUrl: httpsUrl.optional(),
     faviconUrl: httpsUrl.optional(),
     announcement: z.string().max(300).optional(),
+    // Cards per row for product grids/sliders and the category slider: phone (1-3) and computer (2-6).
+    layout: z
+      .object({
+        products: z.object({ mobile: z.number().int().min(1).max(3), desktop: z.number().int().min(2).max(6) }).strict().optional(),
+        categories: z.object({ mobile: z.number().int().min(1).max(3), desktop: z.number().int().min(2).max(6) }).strict().optional(),
+      })
+      .strict()
+      .optional(),
     // Coupon promoted on product pages ("Where's the discount?"). Display only: checkout still validates the code itself.
     productOffer: z
       .object({ code: z.string().trim().regex(/^[A-Za-z0-9_-]{1,32}$/), text: z.string().trim().min(1).max(120) })

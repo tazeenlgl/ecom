@@ -71,6 +71,14 @@ a { transition: color 0.2s; }
 @utility card { @apply rounded-2xl border border-line bg-surface; }
 @utility prose-store { @apply max-w-none leading-relaxed text-fg/85 [&_a]:text-accent [&_a]:underline [&_h2]:mt-8 [&_h2]:font-display [&_h2]:text-2xl [&_li]:ml-5 [&_li]:list-disc [&_p]:mb-4; }
 
+/* Cards per row, set per store (see layoutStyle): phone, tablet, computer. Defaults apply if the variables are missing. */
+@utility grid-products {
+  display: grid;
+  grid-template-columns: repeat(var(--prod-m, 2), minmax(0, 1fr));
+  @media (min-width: 768px) { grid-template-columns: repeat(var(--prod-t, 3), minmax(0, 1fr)); }
+  @media (min-width: 1024px) { grid-template-columns: repeat(var(--prod-d, 4), minmax(0, 1fr)); }
+}
+
 .skeleton { background: linear-gradient(90deg, var(--brand-line) 0%, color-mix(in srgb, var(--brand-line) 40%, white) 50%, var(--brand-line) 100%); background-size: 200% 100%; animation: shimmer 1.4s infinite linear; }
 @keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
 

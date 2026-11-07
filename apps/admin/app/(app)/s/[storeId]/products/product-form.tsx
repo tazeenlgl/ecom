@@ -4,11 +4,15 @@ import { useState } from 'react';
 import { z } from 'zod';
 import { useStore } from '@/components/store-context';
 import { ErrorNote, Field, validate } from '@/components/ui';
-import { errorText } from '@/lib/client';
+import { api, errorText } from '@/lib/client';
 import { slugify } from '@/lib/format';
 import { useFetch } from '@/lib/hooks';
 
-export type ProductFormValues = { slug: string; title: string; description: string | null; taxRateBps: number; hsnCode: string | null; sizeChartId: string | null; categoryIds: string[] };
+export type ProductFormValues = { slug: string; title: string; description: string | null; taxRateBps: number; hsnCode: string | null; sizeChartId: string | null; categoryIds: string[]; attributes?: Record<string, string | number | boolean> };
+type AttributeDef = { id: string; code: string; type: string; scope: string; options: string[] };
+
+/** Labels offered when a store first sets up card labels; they can be edited later under the attribute definition. */
+const DEFAULT_LABELS = ['New', 'Bestseller', 'Exclusive', 'Trending', 'Limited edition'];
 type Category = { id: string; name: string; parentId: string | null; isActive: boolean };
 type SizeChart = { id: string; name: string };
 
@@ -24,6 +28,9 @@ export function ProductForm({ initial, submitLabel, onSubmit }: { initial?: Part
   const { s } = useStore();
   const cats = useFetch<{ items: Category[] }>(s('categories'));
   const charts = useFetch<{ items: SizeChart[] }>(s('size-charts'));
+  const attrs = useFetch<{ items: AttributeDef[] }>(s('attributes'));
+  const labelDef = attrs.data?.items.find((a) => a.code === 'label' && a.scope === 'product' && a.type === 'select');
+  const [settingUp, setSettingUp] = useState(false);
   const [f, setF] = useState({
     title: initial?.title ?? '',
     slug: initial?.slug ?? '',
@@ -32,6 +39,7 @@ export function ProductForm({ initial, submitLabel, onSubmit }: { initial?: Part
     hsnCode: initial?.hsnCode ?? '',
     sizeChartId: initial?.sizeChartId ?? '',
     categoryIds: initial?.categoryIds ?? ([] as string[]),
+    label: typeof initial?.attributes?.label === 'string' ? initial.attributes.label : '',
   });
   const [slugTouched, setSlugTouched] = useState(Boolean(initial?.slug));
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -58,6 +66,8 @@ export function ProductForm({ initial, submitLabel, onSubmit }: { initial?: Part
             hsnCode: v.data.hsnCode || null,
             sizeChartId: f.sizeChartId || null,
             categoryIds: f.categoryIds,
+            // Only touch attributes once the label attribute exists; other attribute values are kept as they were.
+            ...(labelDef ? { attributes: withLabel(initial?.attributes ?? {}, f.label) } : {}),
           });
         } catch (err) {
           setError(errorText(err));
@@ -83,6 +93,38 @@ export function ProductForm({ initial, submitLabel, onSubmit }: { initial?: Part
           )}
         </Field>
       </div>
+      <Field label="Card label (optional)" hint="Shown in the corner of the product card on the storefront, e.g. Bestseller.">
+        {(p) =>
+          labelDef ? (
+            <select {...p} className="field" value={f.label} onChange={(e) => setF({ ...f, label: e.target.value })}>
+              <option value="">None (shows the discount, if any)</option>
+              {labelDef.options.map((o) => <option key={o} value={o}>{o}</option>)}
+            </select>
+          ) : (
+            <div className="flex flex-wrap items-center gap-3 text-sm text-muted">
+              <span>Card labels are not set up for this store yet.</span>
+              <button
+                type="button"
+                className="btn-secondary"
+                disabled={settingUp || attrs.loading}
+                onClick={async () => {
+                  setSettingUp(true);
+                  try {
+                    await api(s('attributes'), { method: 'POST', body: { code: 'label', label: 'Card label', type: 'select', scope: 'product', options: DEFAULT_LABELS } });
+                    await attrs.reload();
+                  } catch (err) {
+                    setError(errorText(err));
+                  } finally {
+                    setSettingUp(false);
+                  }
+                }}
+              >
+                {settingUp ? 'Setting up…' : 'Set up card labels'}
+              </button>
+            </div>
+          )
+        }
+      </Field>
       <fieldset>
         <legend className="label">Categories</legend>
         {cats.error && <ErrorNote message={cats.error} />}
@@ -103,4 +145,9 @@ export function ProductForm({ initial, submitLabel, onSubmit }: { initial?: Part
       <div className="flex justify-end"><button className="btn-primary" disabled={busy}>{busy ? 'Saving…' : submitLabel}</button></div>
     </form>
   );
+}
+
+function withLabel(attributes: Record<string, string | number | boolean>, label: string) {
+  const { label: _old, ...rest } = attributes;
+  return label ? { ...rest, label } : rest;
 }

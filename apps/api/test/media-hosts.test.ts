@@ -118,6 +118,15 @@ describe('image address policy on the admin API', () => {
     }
   });
 
+  it('validates cards per row, offers and promo notes in the public settings', async () => {
+    const good = { layout: { products: { mobile: 2, desktop: 4 }, categories: { mobile: 1, desktop: 6 } }, productOffer: { code: 'SAVE20', text: 'Buy 2, get 20 off' }, productPromo: { title: 'Limited time offer', text: 'Text only' } };
+    expect((await call('PATCH', S(), { publicSettings: good })).statusCode).toBe(200);
+    for (const layout of [{ products: { mobile: 0, desktop: 4 } }, { products: { mobile: 2, desktop: 7 } }, { categories: { mobile: 2, desktop: 1 } }, { products: { mobile: 1.5, desktop: 4 } }, { cards: 3 }]) {
+      expect((await call('PATCH', S(), { publicSettings: { layout } })).statusCode).toBe(400);
+    }
+    expect((await call('PATCH', S(), { publicSettings: { productOffer: { code: 'bad code!', text: 'x' } } })).statusCode).toBe(400);
+  });
+
   it('applies the same policy to banner and homepage images', async () => {
     const banner = (url: string) => call('PUT', `${S()}/blocks`, { kind: 'banner', key: 'top', status: 'draft', position: 0, data: { image: { url } } });
     expect((await banner('https://cdn.example.com/b.jpg')).statusCode).toBe(200);

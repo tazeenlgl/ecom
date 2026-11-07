@@ -89,6 +89,9 @@ function withPreviewOffer(store: Store): Store {
   // STOREFRONT_PREVIEW_PROMO="Title|text" does the same for the product-page promo note.
   const [title, note] = (process.env.STOREFRONT_PREVIEW_PROMO ?? '').split('|').map((s) => s.trim());
   if (!settings.productPromo && title && note) settings.productPromo = { title, text: note };
+  // STOREFRONT_PREVIEW_LAYOUT="productsPhone,productsComputer,categoriesPhone,categoriesComputer" (e.g. 2,4,2,5) previews cards per row.
+  const n = (process.env.STOREFRONT_PREVIEW_LAYOUT ?? '').split(',').map((x) => Number(x.trim()));
+  if (!settings.layout && n.length === 4 && n.every(Number.isInteger)) settings.layout = { products: { mobile: n[0]!, desktop: n[1]! }, categories: { mobile: n[2]!, desktop: n[3]! } };
   return { ...store, settings };
 }
 

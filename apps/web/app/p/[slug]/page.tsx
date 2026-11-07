@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
-import { ProductCard } from '@/components/product-card';
 import { ProductDetail } from '@/components/product-detail';
+import { RelatedCarousel } from '@/components/related-carousel';
 import { isAllowedMediaUrl, parseMediaHosts } from '@/lib/media-hosts';
 import { breadcrumbJsonLd, jsonLdScript, productJsonLd, productMetadata } from '@/lib/product-seo';
 import { apiOrNull, getStore } from '@/lib/server-api';
@@ -37,18 +37,7 @@ export default async function ProductPage({ params }: Props) {
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdScript(jsonLd) }} />
       {breadcrumbs && <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdScript(breadcrumbs) }} />}
       <ProductDetail product={product} editorial={editorial} offer={store.settings?.productOffer} promo={store.settings?.productPromo} />
-      {related.length > 0 && (
-        <section className="container-x mt-16 lg:mt-24" aria-labelledby="related">
-          <h2 id="related" className="display-title text-3xl sm:text-4xl">You may also like</h2>
-          <div className="no-scrollbar -mx-4 mt-8 flex snap-x gap-4 overflow-x-auto px-4 sm:-mx-6 sm:px-6 lg:mx-0 lg:grid lg:grid-cols-4 lg:gap-6 lg:overflow-visible lg:px-0">
-            {related.map((p) => (
-              <div key={p.id} className="w-[70%] shrink-0 snap-start sm:w-[40%] lg:w-auto">
-                <ProductCard product={p} />
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
+      {related.length > 0 && <RelatedCarousel products={related} />}
     </>
   );
 }
@@ -58,6 +47,6 @@ export default async function ProductPage({ params }: Props) {
 async function relatedProducts(product: Product): Promise<ProductSummary[]> {
   const category = product.breadcrumbs.at(-1)?.slug;
   if (!category) return [];
-  const page = await apiOrNull<Page<ProductSummary>>(`products?category=${encodeURIComponent(category)}&limit=9`);
-  return (page?.items ?? []).filter((p) => p.id !== product.id).slice(0, 4);
+  const page = await apiOrNull<Page<ProductSummary>>(`products?category=${encodeURIComponent(category)}&limit=13`);
+  return (page?.items ?? []).filter((p) => p.id !== product.id).slice(0, 12);
 }

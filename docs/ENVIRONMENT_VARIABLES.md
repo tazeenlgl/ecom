@@ -37,6 +37,7 @@ Used outside the app config:
 | `ADMIN_PASSWORD` | `npm run admin:create` | Password for the bootstrapped platform owner, read from the environment so it stays out of command arguments |
 | `STOREFRONT_EDITORIAL_STORES` | `apps/web` | Comma-separated store slugs that get the editorial look without setting `theme.variant` in the store settings (local preview only) |
 | `STOREFRONT_PREVIEW_OFFER` | `apps/web` | `CODE\|text` shown as the product-page offer when the store has none. Ignored in production builds; display only (local preview) |
+| `STOREFRONT_PREVIEW_LAYOUT` | `apps/web` | `productsPhone,productsComputer,categoriesPhone,categoriesComputer` (e.g. `2,4,2,5`) previews cards per row when the store has no layout setting. Ignored in production builds (local preview) |
 | `STOREFRONT_PREVIEW_PROMO` | `apps/web` | `Title|text` shown as the product-page promo note when the store has none. Ignored in production builds (local preview) |
 
 When a real provider is approved, its credentials will be added here as new variables (for example a gateway key id, key secret and webhook secret), each validated in `env.ts`, with the live adapter selectable only by an explicit value.

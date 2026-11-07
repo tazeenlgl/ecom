@@ -48,7 +48,7 @@ export function ProductGrid({ initial, query }: { initial: Page<ProductSummary>;
 
   return (
     <>
-      <ul className="grid grid-cols-2 gap-x-4 gap-y-10 md:grid-cols-3 xl:grid-cols-4">
+      <ul className="grid-products gap-x-4 gap-y-10">
         {items.map((p, i) => (
           <motion.li
             key={p.id}
@@ -63,7 +63,7 @@ export function ProductGrid({ initial, query }: { initial: Page<ProductSummary>;
       </ul>
       <div ref={sentinel} aria-hidden />
       {loading && (
-        <div className="mt-10 grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-4">
+        <div className="grid-products mt-10 gap-4">
           {Array.from({ length: 4 }, (_, i) => (
             <div key={i} className="skeleton aspect-[4/5] rounded-2xl" />
           ))}

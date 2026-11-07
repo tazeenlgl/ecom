@@ -94,6 +94,12 @@ export function catalogueStorefrontRoutes(ctx: AppContext) {
             minPricePaise: sql<number | null>`(select min(vp.price_paise) from ${variantPrices} vp join ${productVariants} pv on pv.id = vp.variant_id where pv.product_id = "products"."id" and pv.status = 'active')`,
             maxMrpPaise: sql<number | null>`(select max(vp.mrp_paise) from ${variantPrices} vp join ${productVariants} pv on pv.id = vp.variant_id where pv.product_id = "products"."id" and pv.status = 'active')`,
             imageUrl: sql<string | null>`(select pm.url from ${productMedia} pm where pm.product_id = "products"."id" and pm.kind = 'image' order by pm.position limit 1)`,
+            // Second photo for the card's hover swap.
+            hoverImageUrl: sql<string | null>`(select pm.url from ${productMedia} pm where pm.product_id = "products"."id" and pm.kind = 'image' order by pm.position offset 1 limit 1)`,
+            // Card label from the product's `label` attribute (a store-defined select, e.g. Bestseller).
+            label: sql<string | null>`nullif("products"."attributes"->>'label', '')`,
+            // Distinct colours of active variants (variant option `colour` or `color`), in variant order.
+            colours: sql<string[]>`coalesce((select array_agg(c order by p) from (select coalesce(pv.options->>'colour', pv.options->>'color') as c, min(pv.position) as p from ${productVariants} pv where pv.product_id = "products"."id" and pv.status = 'active' group by 1) x where c is not null and c <> ''), '{}')`,
           })
           .from(products)
           .where(and(eq(products.storeId, storeId), eq(products.status, 'published'), ...filters, cursorCondition(query.cursor, products.createdAt, products.id)))
@@ -163,7 +169,10 @@ export function catalogueStorefrontRoutes(ctx: AppContext) {
             title: product.title,
             description: product.description,
             specifications: product.specifications,
-            attributes: Object.entries(product.attributes).map(([code, value]) => ({ code, label: labels[code] ?? code, value })),
+            // `label` is the card label (merchandising), not a product detail, so it is left out here.
+            attributes: Object.entries(product.attributes)
+              .filter(([code]) => code !== 'label')
+              .map(([code, value]) => ({ code, label: labels[code] ?? code, value })),
             seo: product.seo,
             // Resolved on the server so the storefront only renders it (docs/product-management, SEO Part C).
             canonicalUrl,

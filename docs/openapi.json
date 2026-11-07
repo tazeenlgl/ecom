@@ -830,6 +830,52 @@
                         "type": "string",
                         "maxLength": 300
                       },
+                      "layout": {
+                        "type": "object",
+                        "properties": {
+                          "products": {
+                            "type": "object",
+                            "properties": {
+                              "mobile": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 3
+                              },
+                              "desktop": {
+                                "type": "integer",
+                                "minimum": 2,
+                                "maximum": 6
+                              }
+                            },
+                            "required": [
+                              "mobile",
+                              "desktop"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "categories": {
+                            "type": "object",
+                            "properties": {
+                              "mobile": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 3
+                              },
+                              "desktop": {
+                                "type": "integer",
+                                "minimum": 2,
+                                "maximum": 6
+                              }
+                            },
+                            "required": [
+                              "mobile",
+                              "desktop"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "additionalProperties": false
+                      },
                       "productOffer": {
                         "type": "object",
                         "properties": {
@@ -1126,6 +1172,52 @@
                       "announcement": {
                         "type": "string",
                         "maxLength": 300
+                      },
+                      "layout": {
+                        "type": "object",
+                        "properties": {
+                          "products": {
+                            "type": "object",
+                            "properties": {
+                              "mobile": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 3
+                              },
+                              "desktop": {
+                                "type": "integer",
+                                "minimum": 2,
+                                "maximum": 6
+                              }
+                            },
+                            "required": [
+                              "mobile",
+                              "desktop"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "categories": {
+                            "type": "object",
+                            "properties": {
+                              "mobile": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 3
+                              },
+                              "desktop": {
+                                "type": "integer",
+                                "minimum": 2,
+                                "maximum": 6
+                              }
+                            },
+                            "required": [
+                              "mobile",
+                              "desktop"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "additionalProperties": false
                       },
                       "productOffer": {
                         "type": "object",

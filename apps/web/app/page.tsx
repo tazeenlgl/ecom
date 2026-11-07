@@ -1,10 +1,12 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { ArrowIcon, ReturnIcon, ShieldIcon, TruckIcon } from '@/components/icons';
+import { CategoryShowcase, type CategoryTile } from '@/components/category-showcase';
 import { HeroCarousel } from '@/components/hero-carousel';
 import { Hero } from '@/components/home-hero';
 import { type CategoryChip, MobileCategoryBar } from '@/components/mobile-category-bar';
 import { ProductCard } from '@/components/product-card';
+import { type ProductTab, ProductTabs } from '@/components/product-tabs';
 import { Reveal } from '@/components/reveal';
 import { RichText } from '@/components/rich-text';
 import { type HomeItem, planHomepage } from '@/lib/hero-slides';
@@ -21,7 +23,9 @@ export default async function HomePage() {
   ]);
 
   const editorial = store.settings.theme?.variant === 'editorial';
-  const [nav, chips] = editorial ? await Promise.all([getNavigation(), categoryChips(categories.items)]) : [[], [] as CategoryChip[]];
+  const [nav, chips, productTabs] = editorial
+    ? await Promise.all([getNavigation(), categoryChips(categories.items), categoryTabs(categories.items)])
+    : [[], [] as CategoryChip[], [] as ProductTab[]];
 
   const items: HomeItem[] = sections.items.length
     ? planHomepage(sections.items)
@@ -44,6 +48,7 @@ export default async function HomePage() {
               return <TileGrid key={i} heading={s.heading} tiles={collections.items.map((c) => ({ href: `/collections/${c.slug}`, label: c.title }))} />;
             case 'category_grid': {
               const chosen = s.categorySlugs?.length ? categories.items.filter((c) => s.categorySlugs!.includes(c.slug)) : categories.items.filter((c) => !c.parentId);
+              if (editorial) return <CategoryShowcase key={i} heading={s.heading} tiles={await categoryPhotos(chosen)} />;
               return <TileGrid key={i} heading={s.heading} tiles={chosen.map((c) => ({ href: `/c/${c.slug}`, label: c.name }))} />;
             }
             case 'image_with_text':
@@ -58,6 +63,8 @@ export default async function HomePage() {
           }
         }),
       )}
+
+      {editorial && productTabs.length > 0 && <ProductTabs heading="New this season" tabs={productTabs} />}
 
       {banners.items.length > 0 && (
         <section className="container-x mt-16 grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
@@ -106,7 +113,7 @@ async function ProductRow({ section }: { section: HomepageSection }) {
           {section.link?.label ?? 'View all'} <ArrowIcon width={16} height={16} className="transition group-hover:translate-x-1" />
         </Link>
       </Reveal>
-      <ul className="grid grid-cols-2 gap-x-4 gap-y-10 md:grid-cols-3 xl:grid-cols-4">
+      <ul className="grid-products gap-x-4 gap-y-10">
         {page.items.map((p, i) => (
           <li key={p.id}>
             <Reveal delay={(i % 4) * 0.08}>
@@ -163,6 +170,16 @@ function ImageWithText({ section, flip }: { section: HomepageSection; flip: bool
   );
 }
 
+/** Photo tiles for the editorial category grid: the newest product photo in each chosen category (none if it is empty). */
+async function categoryPhotos(chosen: Category[]): Promise<CategoryTile[]> {
+  return Promise.all(
+    chosen.slice(0, 8).map(async (c) => {
+      const page = await api<Page<ProductSummary>>(`products?category=${encodeURIComponent(c.slug)}&limit=1`).catch(() => null);
+      return { href: `/c/${c.slug}`, label: c.name, imageUrl: page?.items[0]?.imageUrl ?? null };
+    }),
+  );
+}
+
 /** One product photo per top-level category for the phone category row. A category with no products simply has no photo. */
 async function categoryChips(categories: Category[]): Promise<CategoryChip[]> {
   const top = categories.filter((c) => !c.parentId).slice(0, 8);
@@ -172,4 +189,16 @@ async function categoryChips(categories: Category[]): Promise<CategoryChip[]> {
       return { slug: c.slug, name: c.name, imageUrl: page?.items[0]?.imageUrl ?? null };
     }),
   );
+}
+
+/** Editorial product tabs: one tab per top-level category (up to 4) with its latest 10 products; empty categories are skipped. */
+async function categoryTabs(categories: Category[]): Promise<ProductTab[]> {
+  const top = categories.filter((c) => !c.parentId).slice(0, 4);
+  const tabs = await Promise.all(
+    top.map(async (c) => {
+      const page = await api<Page<ProductSummary>>(`products?category=${encodeURIComponent(c.slug)}&limit=10`).catch(() => null);
+      return { key: c.slug, label: c.name, href: `/c/${c.slug}`, products: page?.items ?? [] };
+    }),
+  );
+  return tabs.filter((tab) => tab.products.length > 0);
 }

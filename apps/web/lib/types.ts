@@ -9,6 +9,7 @@ export type StoreSettings = {
   logoUrl?: string;
   faviconUrl?: string;
   announcement?: string;
+  layout?: { products?: { mobile: number; desktop: number }; categories?: { mobile: number; desktop: number } };
   productOffer?: { code: string; text: string };
   productPromo?: { title: string; text: string };
   contact?: { email?: string; phone?: string };
@@ -40,6 +41,10 @@ export type ProductSummary = {
   minPricePaise: number | null;
   maxMrpPaise: number | null;
   imageUrl: string | null;
+  /** Second photo, card label and variant colours (older API responses may omit them). */
+  hoverImageUrl?: string | null;
+  label?: string | null;
+  colours?: string[];
 };
 
 export type Media = { url: string; kind: string; altText: string | null; width: number | null; height: number | null; variantId: string | null };
