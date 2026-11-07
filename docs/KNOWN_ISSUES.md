@@ -33,7 +33,7 @@ Last reviewed 2026-11-05.
 16. **Tests not written** for the content and reports endpoints and the worker loop ([TESTING.md](TESTING.md#not-covered-yet)). The product list and sales report now have regression tests.
 17. **Admin API gaps found while building the admin UI** ([ADMIN.md](ADMIN.md#not-built-and-api-gaps)): no count endpoints, no order text search or customer filter, no list of return requests, no way to list another administrator's role grants, no read of a collection's products, no product delete, and no password change or reset for administrators.
 18. **`PATCH /v1/admin/stores/:storeId` with an empty body returns 500** instead of 400 (an empty update set). The admin UI always sends a field.
-19. **Block and media validation requires https image addresses.** A relative path such as `/photos/x.jpg` (used by the local preview) can be inserted into the database directly but cannot be saved through the API.
+19. **Block and media validation requires https image addresses.** A relative path such as `/photos/x.jpg` (used by the local preview) can be inserted into the database directly but cannot be saved through the API. Local development uploads therefore use the pseudo host `local-media.test` (see ENVIRONMENT_VARIABLES.md).
 20. **Rate limits are in memory.** Admin sign-in (10 per client IP and 5 per account per 15 minutes, the account key a keyed hash of the normalised email) and failed coupon attempts (10 per cart and 30 per client IP per 15 minutes) reset when the API restarts, and with several API instances each enforces its own count. Move them to a shared store before running more than one instance. Behind a proxy that does not forward a valid client IP, everyone shares one per-IP bucket. A determined attacker can still lock a known administrator out by failing five times (account limits trade availability for safety).
 17. **An empty `apps/api/src/modules/pricing/` folder** is left over from the foundation. Price endpoints live in `catalogue`.
 
@@ -43,6 +43,9 @@ Last reviewed 2026-11-05.
 23. **Payment safety follow-ups:** a transaction left `created` (the process stopped between saving it and the provider call, so it has no provider reference) is not reconciled or closed. An abandoned attempt is checked only for 48 hours after its creation. A Paytm refund notification, if its form fields look like a payment notification, could be read as one; the format is unverified. The refund job still calls the provider inside a database transaction. The late-payment window uses the store's `unpaidOrderTtlMinutes` against the order's placed time, with no grace period. A test database whose clock runs ahead of the machine can make job-driven tests flaky (`commerce.test.ts` failed 3 tests in 2 of about 6 runs; not fixed here).
 
 ## Risks
+
+- **Image optimizer redirects (R2 residual).** The storefront restricts `/_next/image` to `MEDIA_ALLOWED_HOSTS`, but Next.js 15.5.29 follows redirects from an allowed host and has no private-address or DNS-rebinding check (verified in `node_modules/next/dist/server/image-optimizer.js`). Allow only trusted hosts that do not redirect, filter the storefront server's outbound traffic to private ranges and the metadata address, and rate-limit `/_next/image` at the edge. A hardened proxy or a Next.js upgrade is the fix; see `docs/product-management/MEDIA_ARCHITECTURE.md` section 7.
+- **Legacy photos on other hosts.** Rows created before `MEDIA_ALLOWED_HOSTS` may point at hosts that are not listed. They still display (loaded directly, unoptimized) but are left out of Open Graph and JSON-LD, and editing a store's logo or favicon on such a host is refused until the host is listed or the image is re-hosted.
 
 | Risk | Impact | Mitigation |
 | --- | --- | --- |
@@ -60,3 +63,10 @@ Last reviewed 2026-11-05.
 4. Return and exchange policy per store: window, which items are eligible, who pays return shipping.
 5. COD limits and fees per store and zone. The mechanisms exist; the values are business settings.
 6. Data residency and retention requirements for customer data.
+
+## Editorial look (Milestone 1)
+
+- **No real hero content yet:** the published homepage hero has no image, so the transparent header and full-bleed hero only show once licensed desktop and mobile campaign images are published. Verified with a temporary stand-in page that was removed.
+- **Header over any image:** the transparent header relies on a dark top gradient for contrast; check each new campaign image.
+- **Animations:** header and hero transitions were checked by their end states only; a visible-browser pass is still needed.
+- **Local setup:** the demo store's relative logo path is rejected by the settings API, so the variant is set with an environment variable locally.

@@ -144,3 +144,10 @@ Each record gives the context, the decision, its consequences and its status. Da
 - **Decision:** manual confirmation and failure require the provider's refund id to be entered back. A failed refund the provider had accepted keeps its money unavailable for 24 hours. During that time, and after, a refund marked failed can be corrected to paid, unless that would take the order above its total. Every step is audited and none overwrites an earlier one. Abandoned payment attempts are checked with the provider for 48 hours after creation.
 - **Consequences:** a genuine failure delays a retry by up to 24 hours. Who settled a refund, when and with what reference is stored on the refund row.
 - **Status:** accepted. The settlement metadata is stored on the refund row (migration 0004, approved 2026-11-05).
+
+## ADR-020: The editorial storefront look is an opt-in store variant, not a global restyle (2026-11-07)
+
+- **Context:** one storefront codebase serves every store; the Sky-inspired redesign must change TAZEEN only.
+- **Decision:** `settings.theme.variant = "editorial"` (free-form theme string, no schema change) sets `data-variant` on `<html>`; all new CSS and component classes use the `ed:` variant. Shared defaults are unchanged.
+- **Consequences:** the local demo store's logo is a relative path that the settings API rejects, so locally the variant is switched on with `STOREFRONT_EDITORIAL_STORES=demo`. Production sets the theme variant in the store settings.
+- **Status:** accepted.

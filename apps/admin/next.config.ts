@@ -3,6 +3,10 @@ import type { NextConfig } from 'next';
 const config: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  // Development uploads only: the API serves them at /v1/media (that route exists only with local storage in development).
+  async rewrites() {
+    return process.env.NODE_ENV === 'production' ? [] : [{ source: '/dev-media/:path*', destination: `${(process.env.ADMIN_API_URL ?? 'http://localhost:4000').replace(/\/$/, '')}/v1/media/:path*` }];
+  },
   async headers() {
     return [
       {

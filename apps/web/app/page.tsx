@@ -1,10 +1,16 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { ArrowIcon, ReturnIcon, ShieldIcon, TruckIcon } from '@/components/icons';
+import { CategoryShowcase, type CategoryTile } from '@/components/category-showcase';
+import { HeroCarousel } from '@/components/hero-carousel';
+import { Hero } from '@/components/home-hero';
+import { type CategoryChip, MobileCategoryBar } from '@/components/mobile-category-bar';
 import { ProductCard } from '@/components/product-card';
+import { type ProductTab, ProductTabs } from '@/components/product-tabs';
 import { Reveal } from '@/components/reveal';
 import { RichText } from '@/components/rich-text';
-import { api, getStore } from '@/lib/server-api';
+import { type HomeItem, planHomepage } from '@/lib/hero-slides';
+import { api, getNavigation, getStore } from '@/lib/server-api';
 import type { Banner, Block, Category, Collection, HomepageSection, Page, ProductSummary } from '@/lib/types';
 
 export default async function HomePage() {
@@ -16,15 +22,23 @@ export default async function HomePage() {
     api<{ items: Collection[] }>('collections'),
   ]);
 
-  const blocks = sections.items.length
-    ? sections.items.map((b) => b.data)
+  const editorial = store.settings.theme?.variant === 'editorial';
+  const [nav, chips, productTabs] = editorial
+    ? await Promise.all([getNavigation(), categoryChips(categories.items), categoryTabs(categories.items)])
+    : [[], [] as CategoryChip[], [] as ProductTab[]];
+
+  const items: HomeItem[] = sections.items.length
+    ? planHomepage(sections.items)
     : // Sensible default until the store's homepage is set up in the admin.
-      ([{ layout: 'hero', heading: store.name, body: store.settings.seo?.defaultDescription, link: { label: 'Shop the collection', href: '/shop' } }, { layout: 'product_grid', heading: 'New arrivals', productLimit: 8 }] satisfies HomepageSection[]);
+      ([{ layout: 'hero', heading: store.name, body: store.settings.seo?.defaultDescription, link: { label: 'Shop the collection', href: '/shop' } }, { layout: 'product_grid', heading: 'New arrivals', productLimit: 8 }] satisfies HomepageSection[]).map((section, i) => ({ kind: 'section', key: `default-${i}`, section }));
 
   return (
     <>
+      {editorial && <MobileCategoryBar nav={nav} chips={chips} />}
       {await Promise.all(
-        blocks.map(async (s, i) => {
+        items.map(async (item, i) => {
+          if (item.kind === 'carousel') return <HeroCarousel key="hero-carousel" slides={item.slides} />;
+          const s = item.section;
           switch (s.layout) {
             case 'hero':
               return <Hero key={i} section={s} />;
@@ -34,6 +48,7 @@ export default async function HomePage() {
               return <TileGrid key={i} heading={s.heading} tiles={collections.items.map((c) => ({ href: `/collections/${c.slug}`, label: c.title }))} />;
             case 'category_grid': {
               const chosen = s.categorySlugs?.length ? categories.items.filter((c) => s.categorySlugs!.includes(c.slug)) : categories.items.filter((c) => !c.parentId);
+              if (editorial) return <CategoryShowcase key={i} heading={s.heading} tiles={await categoryPhotos(chosen)} />;
               return <TileGrid key={i} heading={s.heading} tiles={chosen.map((c) => ({ href: `/c/${c.slug}`, label: c.name }))} />;
             }
             case 'image_with_text':
@@ -48,6 +63,8 @@ export default async function HomePage() {
           }
         }),
       )}
+
+      {editorial && productTabs.length > 0 && <ProductTabs heading="New this season" tabs={productTabs} />}
 
       {banners.items.length > 0 && (
         <section className="container-x mt-16 grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
@@ -82,41 +99,6 @@ export default async function HomePage() {
   );
 }
 
-function Hero({ section }: { section: HomepageSection }) {
-  return (
-    <section className="relative isolate overflow-hidden">
-      {section.image ? (
-        <div className="relative h-[82vh] min-h-[520px]">
-          <Image src={section.image.url} alt={section.image.alt ?? ''} fill priority sizes="100vw" className="animate-[heroZoom_14s_ease-out_forwards] object-cover" />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent" />
-          <div className="container-x absolute inset-x-0 bottom-0 pb-16 text-white sm:pb-24">
-            <HeroCopy section={section} light />
-          </div>
-        </div>
-      ) : (
-        <div className="container-x py-24 sm:py-36">
-          <HeroCopy section={section} />
-        </div>
-      )}
-      <style>{`@keyframes heroZoom{from{transform:scale(1.08)}to{transform:scale(1)}}`}</style>
-    </section>
-  );
-}
-
-function HeroCopy({ section, light }: { section: HomepageSection; light?: boolean }) {
-  return (
-    <Reveal className="max-w-3xl">
-      {section.heading && <h1 className="display-title text-5xl leading-[0.95] sm:text-7xl lg:text-8xl">{section.heading}</h1>}
-      {section.body && <p className={`mt-6 max-w-lg text-lg ${light ? 'text-white/85' : 'text-muted'}`}>{section.body}</p>}
-      {section.link && (
-        <Link href={section.link.href} className={`btn mt-10 ${light ? 'bg-white text-black hover:bg-white/90' : 'bg-accent text-accent-fg'}`}>
-          {section.link.label} <ArrowIcon width={16} height={16} />
-        </Link>
-      )}
-    </Reveal>
-  );
-}
-
 async function ProductRow({ section }: { section: HomepageSection }) {
   const limit = section.productLimit ?? 8;
   const filter = section.collectionSlug ? `collection=${section.collectionSlug}&` : '';
@@ -131,7 +113,7 @@ async function ProductRow({ section }: { section: HomepageSection }) {
           {section.link?.label ?? 'View all'} <ArrowIcon width={16} height={16} className="transition group-hover:translate-x-1" />
         </Link>
       </Reveal>
-      <ul className="grid grid-cols-2 gap-x-4 gap-y-10 md:grid-cols-3 xl:grid-cols-4">
+      <ul className="grid-products gap-x-4 gap-y-10">
         {page.items.map((p, i) => (
           <li key={p.id}>
             <Reveal delay={(i % 4) * 0.08}>
@@ -186,4 +168,37 @@ function ImageWithText({ section, flip }: { section: HomepageSection; flip: bool
       </Reveal>
     </section>
   );
+}
+
+/** Photo tiles for the editorial category grid: the newest product photo in each chosen category (none if it is empty). */
+async function categoryPhotos(chosen: Category[]): Promise<CategoryTile[]> {
+  return Promise.all(
+    chosen.slice(0, 8).map(async (c) => {
+      const page = await api<Page<ProductSummary>>(`products?category=${encodeURIComponent(c.slug)}&limit=1`).catch(() => null);
+      return { href: `/c/${c.slug}`, label: c.name, imageUrl: page?.items[0]?.imageUrl ?? null };
+    }),
+  );
+}
+
+/** One product photo per top-level category for the phone category row. A category with no products simply has no photo. */
+async function categoryChips(categories: Category[]): Promise<CategoryChip[]> {
+  const top = categories.filter((c) => !c.parentId).slice(0, 8);
+  return Promise.all(
+    top.map(async (c) => {
+      const page = await api<Page<ProductSummary>>(`products?category=${encodeURIComponent(c.slug)}&limit=1`).catch(() => null);
+      return { slug: c.slug, name: c.name, imageUrl: page?.items[0]?.imageUrl ?? null };
+    }),
+  );
+}
+
+/** Editorial product tabs: one tab per top-level category (up to 4) with its latest 10 products; empty categories are skipped. */
+async function categoryTabs(categories: Category[]): Promise<ProductTab[]> {
+  const top = categories.filter((c) => !c.parentId).slice(0, 4);
+  const tabs = await Promise.all(
+    top.map(async (c) => {
+      const page = await api<Page<ProductSummary>>(`products?category=${encodeURIComponent(c.slug)}&limit=10`).catch(() => null);
+      return { key: c.slug, label: c.name, href: `/c/${c.slug}`, products: page?.items ?? [] };
+    }),
+  );
+  return tabs.filter((tab) => tab.products.length > 0);
 }

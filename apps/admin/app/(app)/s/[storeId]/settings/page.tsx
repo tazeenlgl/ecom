@@ -8,7 +8,7 @@ import { api, errorText } from '@/lib/client';
 import { dateTime } from '@/lib/format';
 import { useFetch } from '@/lib/hooks';
 
-type StoreFull = { id: string; slug: string; name: string; status: 'active' | 'maintenance' | 'disabled'; currency: string; locale: string; timezone: string; publicSettings: { announcement?: string; contact?: { email?: string; phone?: string }; seo?: { titleTemplate?: string; defaultDescription?: string }; logoUrl?: string; faviconUrl?: string; theme?: Record<string, string>; social?: Record<string, string> }; config: { codEnabled?: boolean; [k: string]: unknown }; posLocationRef: string | null; updatedAt: string };
+type StoreFull = { id: string; slug: string; name: string; status: 'active' | 'maintenance' | 'disabled'; currency: string; locale: string; timezone: string; publicSettings: { announcement?: string; layout?: { products?: { mobile: number; desktop: number }; categories?: { mobile: number; desktop: number } }; productOffer?: { code: string; text: string }; productPromo?: { title: string; text: string }; contact?: { email?: string; phone?: string }; seo?: { titleTemplate?: string; defaultDescription?: string }; logoUrl?: string; faviconUrl?: string; theme?: Record<string, string>; social?: Record<string, string> }; config: { codEnabled?: boolean; [k: string]: unknown }; posLocationRef: string | null; updatedAt: string };
 type Domain = { id: string; hostname: string; isPrimary: boolean; verifiedAt: string | null; verificationRecord?: string; verificationToken?: string | null };
 
 export default function SettingsPage() {
@@ -33,6 +33,10 @@ export default function SettingsPage() {
 const schema = z.object({
   name: z.string().trim().min(1, 'Enter a name.').max(120),
   announcement: z.string().max(300),
+  offerCode: z.string().trim().refine((v) => v === '' || /^[A-Za-z0-9_-]{1,32}$/.test(v), 'Letters, numbers, - and _ only (max 32).'),
+  offerText: z.string().trim().max(120),
+  promoTitle: z.string().trim().max(60),
+  promoText: z.string().trim().max(160),
   email: z.string().trim().refine((v) => v === '' || z.email().safeParse(v).success, 'Enter a valid email.'),
   phone: z.string().trim().max(32),
   description: z.string().max(500),
@@ -43,7 +47,7 @@ function Profile({ store, onSaved }: { store: StoreFull; onSaved: () => Promise<
   const { s, can } = useStore();
   const toast = useToast();
   const ps = store.publicSettings ?? {};
-  const [f, setF] = useState({ name: store.name, announcement: ps.announcement ?? '', email: ps.contact?.email ?? '', phone: ps.contact?.phone ?? '', description: ps.seo?.defaultDescription ?? '', titleTemplate: ps.seo?.titleTemplate ?? '', codEnabled: store.config?.codEnabled !== false, status: store.status });
+  const [f, setF] = useState({ name: store.name, announcement: ps.announcement ?? '', offerCode: ps.productOffer?.code ?? '', offerText: ps.productOffer?.text ?? '', prodMobile: String(ps.layout?.products?.mobile ?? 2), prodDesktop: String(ps.layout?.products?.desktop ?? 4), catMobile: String(ps.layout?.categories?.mobile ?? 2), catDesktop: String(ps.layout?.categories?.desktop ?? 5), promoTitle: ps.productPromo?.title ?? '', promoText: ps.productPromo?.text ?? '', email: ps.contact?.email ?? '', phone: ps.contact?.phone ?? '', description: ps.seo?.defaultDescription ?? '', titleTemplate: ps.seo?.titleTemplate ?? '', codEnabled: store.config?.codEnabled !== false, status: store.status });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -54,12 +58,26 @@ function Profile({ store, onSaved }: { store: StoreFull; onSaved: () => Promise<
     const v = validate(schema, f);
     setErrors(v.errors);
     if (!v.data) return;
+    if (Boolean(v.data.offerCode) !== Boolean(v.data.offerText)) {
+      setErrors({ ...v.errors, [v.data.offerCode ? 'offerText' : 'offerCode']: 'Fill in both the code and the text, or leave both empty.' });
+      return;
+    }
+    if (Boolean(v.data.promoTitle) !== Boolean(v.data.promoText)) {
+      setErrors({ ...v.errors, [v.data.promoTitle ? 'promoText' : 'promoTitle']: 'Fill in both the title and the text, or leave both empty.' });
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
       const publicSettings = {
         ...ps,
         announcement: v.data.announcement || undefined,
+        layout: {
+          products: { mobile: Number(f.prodMobile), desktop: Number(f.prodDesktop) },
+          categories: { mobile: Number(f.catMobile), desktop: Number(f.catDesktop) },
+        },
+        productPromo: v.data.promoTitle ? { title: v.data.promoTitle, text: v.data.promoText } : undefined,
+        productOffer: v.data.offerCode ? { code: v.data.offerCode.toUpperCase(), text: v.data.offerText } : undefined,
         contact: { ...ps.contact, email: v.data.email || undefined, phone: v.data.phone || undefined },
         seo: { ...ps.seo, defaultDescription: v.data.description || undefined, titleTemplate: v.data.titleTemplate || undefined },
       };
@@ -86,6 +104,23 @@ function Profile({ store, onSaved }: { store: StoreFull; onSaved: () => Promise<
             </Field>
           </div>
           <Field label="Announcement bar" error={errors.announcement} hint="Shown at the top of the storefront. Leave empty to hide it.">{(p) => <input {...p} className="field" value={f.announcement} onChange={(e) => setF({ ...f, announcement: e.target.value })} />}</Field>
+          <fieldset className="rounded-xl border border-line p-4">
+            <legend className="label px-1">Cards per row</legend>
+            <p className="mb-3 text-xs text-muted">How many cards show side by side on the storefront. Product rows and grids use the product numbers; the category slider uses the category numbers. If a store has fewer categories than the number set, they simply fill the row. Tablets show a number in between.</p>
+            <div className="grid gap-4 sm:grid-cols-4">
+              {([['prodMobile', 'Products on phone', [1, 2, 3]], ['prodDesktop', 'Products on computer', [2, 3, 4, 5, 6]], ['catMobile', 'Categories on phone', [1, 2, 3]], ['catDesktop', 'Categories on computer', [2, 3, 4, 5, 6]]] as const).map(([key, label, options]) => (
+                <Field key={key} label={label}>{(p) => <select {...p} className="field" value={f[key]} onChange={(e) => setF({ ...f, [key]: e.target.value })}>{options.map((n) => <option key={n} value={n}>{n}</option>)}</select>}</Field>
+              ))}
+            </div>
+          </fieldset>
+          <div className="grid gap-4 sm:grid-cols-[1fr_2fr]">
+            <Field label="Product page offer code" error={errors.offerCode} hint="Shown on product pages under “Where’s the discount?”. It must be a real coupon; checkout still checks it.">{(p) => <input {...p} className="field uppercase" value={f.offerCode} onChange={(e) => setF({ ...f, offerCode: e.target.value })} />}</Field>
+            <Field label="Offer text" error={errors.offerText} hint="e.g. Buy 2, get ₹500 off. Leave both empty to hide.">{(p) => <input {...p} className="field" value={f.offerText} onChange={(e) => setF({ ...f, offerText: e.target.value })} />}</Field>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-[1fr_2fr]">
+            <Field label="Product page note title" error={errors.promoTitle} hint="e.g. Limited time offer">{(p) => <input {...p} className="field" value={f.promoTitle} onChange={(e) => setF({ ...f, promoTitle: e.target.value })} />}</Field>
+            <Field label="Product page note text" error={errors.promoText} hint="Text only; it does not change prices. Leave both empty to hide.">{(p) => <input {...p} className="field" value={f.promoText} onChange={(e) => setF({ ...f, promoText: e.target.value })} />}</Field>
+          </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Contact email" error={errors.email}>{(p) => <input {...p} className="field" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} />}</Field>
             <Field label="Contact phone" error={errors.phone}>{(p) => <input {...p} className="field" value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} />}</Field>

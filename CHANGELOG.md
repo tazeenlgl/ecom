@@ -2,7 +2,51 @@
 
 Dates are when the change was committed. Nothing has been deployed.
 
-## 2026-11-05: PR #3 review corrections H1 and H2 (uncommitted)
+## Storefront redesign, Milestone 1: editorial look (uncommitted)
+
+- **Opt-in per store.** A store gets the Sky-inspired editorial look with `settings.theme.variant = "editorial"`; `STOREFRONT_EDITORIAL_STORES` (store slugs) turns it on for a local preview. Stores without it render exactly as before. All new styles sit behind an `ed:` Tailwind variant (`[data-variant="editorial"]`).
+- **Product page (editorial only):** rounded buy-box card, vertical thumbnail strip beside the gallery on desktop, filled size pills, taller Add to bag pill, display-font accordions. Styling only; cart, stock, price and variant logic untouched. Colour swatches and Buy It Now were not added (no colour data; would change checkout flow). Desktop shows all photos stacked with a floating thumbnail rail and a sticky card; phones get a swipe slider with arrows and dots under a card that overlaps the photo. Photos open in a full-screen viewer (Esc, arrow keys, focus returned). A numbered Key features tab block (Details, Specifications, Delivery & returns) appears only when the product has details or specifications, and "You may also like" is a slider of up to 12 products from the product's own category (hairline-divided white cards, soft photo backdrop, discount badge only when real, edge arrows on tablet and desktop, swipe on phones).
+- **Product page offer (implemented):** new optional store setting `publicSettings.productOffer` `{ code, text }` (API schema, Admin → Settings fields "Product page offer code" and "Offer text"). On editorial product pages it shows as a collapsible "Where's the discount?" strip with a copy button. Display only; checkout still validates the coupon. Locally the demo store can't save settings until its logo is an https URL (known issue).
+- **Product page buy box (implemented):** stock line with a pulsing dot above the buy row, outlined "Buy it now" (adds to the cart, then opens the existing checkout), accordions in a bordered card with a Size guide row, and an optional promo note (`publicSettings.productPromo` `{ title, text }`, Admin → Settings; text only, changes no price). Pickup was not added: there is no pickup data; the PIN-code delivery check stays in its place.
+- **Homepage product tabs (editorial, frontend done):** "New this season" block with pill tabs (one per top-level category, 10 products each, instant switching) over an edge-to-edge 2/3/4/5-column card grid. Cards: soft photo backdrop, corner label, name and price; on hover a quick-view eye, "Choose options", and (when the product list provides them) a second photo, a label and colour dots. Quick view loads the product, lets the shopper pick options and adds to the bag. Backend done: the storefront product list now returns `hoverImageUrl` (second photo by position), `label` (the product attribute `label`, a store-defined select; Admin → product → "Card label", with a one-click "Set up card labels") and `colours` (distinct `colour`/`color` variant options in variant order). No migration. The product detail API no longer lists `label` as a product detail.
+- **Shop by category (editorial):** photo tiles (newest product photo per category), dark fade, display-font name with a small index, "Shop now" pill sliding up on hover, "View all" link. It is a responsive slider: exactly 2 tiles on phones, 3 on small tablets, and on tablets and computers every category in one row (up to 4 on tablets, 5 on computers) with the rest sliding. Arrows sit on the row edges whenever there is more to see, with a progress bar; swipe, mouse drag and arrow keys also work, and tiles snap into place. Other stores keep the plain tiles.
+- **Cards per row (editorial and classic, implemented):** new optional store setting `publicSettings.layout` `{ products: { mobile 1-3, desktop 2-6 }, categories: { mobile 1-3, desktop 2-6 } }`, edited in Admin → Settings → "Cards per row". The storefront turns it into CSS variables; it drives the category slider, the homepage "New this season" grid, homepage product rows, the shop, category and collection grids, and the product page "You may also like" slider. The tablet count is derived. Defaults match the old look (products 2 phone / 4 computer, categories 2 / 5). A short category list fills the row; a long one slides with arrows.
+- **Header:** transparent over a full-bleed homepage hero on tablet and desktop (white logo and links), the existing translucent bar after scrolling or while a menu is open. Mobile keeps the compact opaque header.
+- **Hero:** full-height image with a pill call to action on tablet and desktop; on phones a rounded 4:5 card using the mobile image. The classic hero now honours the mobile image and focal point.
+- **Announcement:** optional inline link written as `[label](/path)` in the existing announcement setting; styling relaxed in the editorial look.
+- **Mobile top area (editorial, phones only):** header row of menu, logo, inline search pill and bag; tabs from the store navigation; a row of rounded category thumbnails using one real product photo per category. No API, Admin or database changes.
+
+## Storefront redesign, Phase 1 (uncommitted)
+
+No migration. Nothing deployed. Admin UI unchanged.
+
+Changed:
+- Storefront: quiet announcement bar, centred-wordmark header, editorial hero, and a three-slide hero carousel (`components/hero-carousel.tsx`, rules in `lib/hero-slides.ts`). Slides are `homepage_section` blocks with `layout: "hero"` and key `hero-slide-1` to `hero-slide-3`; the classic single `hero` block and all other sections render as before. Two or three usable slides make a carousel; one is a static hero. Autoplay (5.5 s) pauses on hover, focus, hidden tab, off-screen and under reduced motion.
+- API (additive, no migration): `homepage_section` data accepts optional `mobileImage` and `imageFocus` (`{x,y}` 0 to 100). `mobileImage` goes through the same `MEDIA_ALLOWED_HOSTS` check as `image`. `docs/openapi.json` regenerated.
+- Media upload (API only, no migration): `POST /v1/admin/stores/:storeId/media` (permission `content.write`, raw JPEG, PNG or WebP body, content-sniffed, size-capped, store-scoped server-generated key, audited, rate limited) through a storage adapter: Cloudflare R2 (SigV4 over fetch, no new dependency) when all five `R2_*` variables are set, local disk in development otherwise. Nothing was uploaded to any live service. The OpenAPI document now describes the body as binary images.
+- Admin: **Homepage hero** page (store menu). Three slide cards (`hero-slide-1` to `3`): heading, text, button, desktop and optional mobile image upload/replace/remove, focus X/Y with a crop preview, desktop and phone preview of unsaved edits, order, Save draft / Publish / Unpublish. Saves go through the existing blocks API. The Admin proxy now forwards raw image uploads. Replacing or removing an image only changes the block's address; no stored file is ever deleted.
+- Development: local uploads use the pseudo host `local-media.test`, mapped by the storefront image loader and Admin to the API's `/v1/media/*` (development servers only).
+- Status: implemented. No approved campaign photography exists yet, so crop and overlay on real images are unverified.
+
+## 2026-11-06: Product SEO correctness (R1) and image host restriction (R2)
+
+Plan and decisions: `docs/product-management/`. No migration. Nothing deployed.
+
+Changed (R1, storefront SEO):
+- The storefront product response now carries a resolved `canonicalUrl` (the store's primary verified domain; an admin canonical is honoured only on a verified domain of the same store, over https), `indexable`, `metaDescription`, `breadcrumbs`, and a per-variant tri-state `stock` (`in_stock` | `out_of_stock` | `unknown`; `inStock` stays). The product list carries `updatedAt` and `noIndex`.
+- The product page emits a canonical link, `robots: noindex,nofollow` when not indexable, Open Graph (SEO title, description, `og:url`, image with size and alt) and Twitter card, one JSON-LD `Offer` per variant, and breadcrumb JSON-LD. **Availability is stated only when the POS reported the stock; unknown stock no longer becomes `OutOfStock`.**
+- The meta description is built from whole sentences up to 155 characters and is omitted rather than cut mid-sentence. An admin-written SEO description is used as written.
+- The sitemap uses the update time for `lastmod` and leaves out `noIndex` products. `seo.canonicalUrl` must now be https.
+- The product page button says "Availability not confirmed" (still disabled) for a variant the POS has not reported, instead of "Currently unavailable".
+- Behaviour change to expect: a store with no verified primary domain gets no canonical and its product pages are `noindex`.
+
+Changed (R2, image hosts):
+- New `MEDIA_ALLOWED_HOSTS` (API and storefront). The API refuses image addresses on other hosts, IP literals, local names, credentials, odd ports and fragments for product photos, store logo/favicon and banner/homepage images. **With the variable empty no new image address is accepted.** Existing rows are untouched.
+- The storefront's image optimizer no longer fetches from any https host (`hostname: '**'` removed): `remotePatterns` come from the list, images on other hosts load directly in the browser, and Open Graph/JSON-LD omit them. Upstream size is capped at 10 MB and the disk cache at 500 MB.
+- Known gap: Next.js 15.5.29 follows redirects and has no private-address check, so an allowed host that redirects elsewhere is not blocked. Allow only hosts you trust that do not redirect.
+- Tests: `catalogue-seo`, `storefront-seo-baseline`, `media-hosts` (API); `storefront-seo-baseline`, `media-hosts` (web); the web test config now compiles JSX so page modules can be imported.
+
+## 2026-11-05: PR #3 review corrections H1 and H2
 
 Changed:
 - Payment reconciliation moves a checked payment to the back of the queue with the database clock (`clock_timestamp()`, microseconds, like `created_at`) instead of a millisecond `new Date()`. Two rows handled in the same millisecond used to tie, and the random id decided their order, which failed `payment-safety.test.ts` in CI (reproduced locally in 4 of 12 runs). Which payments are selected, and the order (`updated_at`, then id), are unchanged.

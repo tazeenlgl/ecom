@@ -66,7 +66,36 @@ function withPreviewBrand(store: Store): Store {
   return { ...store, name, brand: { ...store.brand, name }, settings: { ...store.settings, ...(logoUrl ? { logoUrl } : {}) } };
 }
 
-export const getStore = cache(async () => withPreviewBrand((await api<{ store: Store }>('store')).store));
+/**
+ * The editorial storefront look is opt-in per store: `settings.theme.variant = "editorial"` (set in the store's settings).
+ * STOREFRONT_EDITORIAL_STORES (comma-separated store slugs) turns it on for a local preview without editing the store record.
+ */
+function withVariant(store: Store): Store {
+  if (store.settings.theme?.variant) return store;
+  const slugs = (process.env.STOREFRONT_EDITORIAL_STORES ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+  return slugs.includes(store.slug) ? { ...store, settings: { ...store.settings, theme: { ...store.settings.theme, variant: 'editorial' } } } : store;
+}
+
+/**
+ * Local preview only: STOREFRONT_PREVIEW_OFFER="CODE|text" shows a product-page offer when the store has none and the app is not a
+ * production build. It is display only; checkout accepts the code only if a real coupon with that code exists.
+ */
+function withPreviewOffer(store: Store): Store {
+  const raw = process.env.STOREFRONT_PREVIEW_OFFER;
+  if (process.env.NODE_ENV === 'production') return store;
+  const settings = { ...store.settings };
+  const [offerCode, offerText] = (raw ?? '').split('|').map((s) => s.trim());
+  if (!settings.productOffer && offerCode && offerText) settings.productOffer = { code: offerCode, text: offerText };
+  // STOREFRONT_PREVIEW_PROMO="Title|text" does the same for the product-page promo note.
+  const [title, note] = (process.env.STOREFRONT_PREVIEW_PROMO ?? '').split('|').map((s) => s.trim());
+  if (!settings.productPromo && title && note) settings.productPromo = { title, text: note };
+  // STOREFRONT_PREVIEW_LAYOUT="productsPhone,productsComputer,categoriesPhone,categoriesComputer" (e.g. 2,4,2,5) previews cards per row.
+  const n = (process.env.STOREFRONT_PREVIEW_LAYOUT ?? '').split(',').map((x) => Number(x.trim()));
+  if (!settings.layout && n.length === 4 && n.every(Number.isInteger)) settings.layout = { products: { mobile: n[0]!, desktop: n[1]! }, categories: { mobile: n[2]!, desktop: n[3]! } };
+  return { ...store, settings };
+}
+
+export const getStore = cache(async () => withPreviewOffer(withVariant(withPreviewBrand((await api<{ store: Store }>('store')).store))));
 
 /** True when the store has a published content page with this slug (used to show footer links only for pages that exist). */
 export const pageExists = cache(async (slug: string): Promise<boolean> => (await apiOrNull<{ page: unknown }>(`pages/${encodeURIComponent(slug)}`)) !== null);

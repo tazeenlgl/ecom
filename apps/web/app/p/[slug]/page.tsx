@@ -1,23 +1,24 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { ProductDetail } from '@/components/product-detail';
+import { RelatedCarousel } from '@/components/related-carousel';
+import { isAllowedMediaUrl, parseMediaHosts } from '@/lib/media-hosts';
+import { breadcrumbJsonLd, jsonLdScript, productJsonLd, productMetadata } from '@/lib/product-seo';
 import { apiOrNull, getStore } from '@/lib/server-api';
-import type { Product } from '@/lib/types';
+import type { Page, Product, ProductSummary } from '@/lib/types';
 
 type Props = { params: Promise<{ slug: string }> };
+
+const mediaHosts = () => parseMediaHosts(process.env.MEDIA_ALLOWED_HOSTS);
 
 const load = async (slug: string) => (await apiOrNull<{ product: Product }>(`products/${encodeURIComponent(slug)}`))?.product ?? null;
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const product = await load((await params).slug);
+  const [product, store] = await Promise.all([load((await params).slug), getStore()]);
   if (!product) return {};
-  const image = product.media.find((m) => m.kind === 'image');
-  const description = product.seo?.description ?? product.description?.slice(0, 160) ?? undefined;
-  return {
-    title: product.seo?.title ?? product.title,
-    description,
-    openGraph: { title: product.title, description, images: image ? [{ url: image.url }] : undefined },
-  };
+  // Only images on allowed hosts are published to search engines and social networks.
+  const image = product.media.find((m) => m.kind === 'image' && isAllowedMediaUrl(m.url, mediaHosts()));
+  return productMetadata(product, store, image ? { url: image.url, width: image.width, height: image.height, alt: image.altText } : undefined);
 }
 
 export default async function ProductPage({ params }: Props) {
@@ -25,32 +26,27 @@ export default async function ProductPage({ params }: Props) {
   const [product, store] = await Promise.all([load(slug), getStore()]);
   if (!product) notFound();
 
-  const prices = product.variants.map((v) => v.pricePaise);
-  const jsonLd = {
-    '@context': 'https://schema.org',
-    '@type': 'Product',
-    name: product.title,
-    description: product.description ?? undefined,
-    image: product.media.filter((m) => m.kind === 'image').map((m) => m.url),
-    sku: product.variants[0]?.skuCode,
-    brand: { '@type': 'Brand', name: store.brand.name },
-    offers: prices.length
-      ? {
-          '@type': 'AggregateOffer',
-          priceCurrency: store.currency,
-          lowPrice: Math.min(...prices) / 100,
-          highPrice: Math.max(...prices) / 100,
-          offerCount: prices.length,
-          availability: product.variants.some((v) => v.inStock) ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock',
-        }
-      : undefined,
-  };
+  const jsonLd = productJsonLd(product, store, product.media.filter((m) => m.kind === 'image' && isAllowedMediaUrl(m.url, mediaHosts())).map((m) => m.url));
+  const breadcrumbs = breadcrumbJsonLd(product, store.name);
+  const editorial = store.settings?.theme?.variant === 'editorial';
+  const related = editorial ? await relatedProducts(product) : [];
 
   return (
     <>
-      {/* JSON.stringify output with "<" escaped cannot break out of the script tag. */}
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, '\\u003c') }} />
-      <ProductDetail product={product} />
+      {/* jsonLdScript escapes "<", so the output cannot break out of the script tag. */}
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdScript(jsonLd) }} />
+      {breadcrumbs && <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdScript(breadcrumbs) }} />}
+      <ProductDetail product={product} editorial={editorial} offer={store.settings?.productOffer} promo={store.settings?.productPromo} />
+      {related.length > 0 && <RelatedCarousel products={related} />}
     </>
   );
+}
+
+
+/** Other products from the product's own category (its deepest breadcrumb). Empty when there is none or the call fails. */
+async function relatedProducts(product: Product): Promise<ProductSummary[]> {
+  const category = product.breadcrumbs.at(-1)?.slug;
+  if (!category) return [];
+  const page = await apiOrNull<Page<ProductSummary>>(`products?category=${encodeURIComponent(category)}&limit=13`);
+  return (page?.items ?? []).filter((p) => p.id !== product.id).slice(0, 12);
 }

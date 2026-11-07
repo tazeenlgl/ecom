@@ -10,7 +10,7 @@ const admin = (method: 'GET' | 'POST' | 'PUT', url: string, payload?: unknown) =
   ctx.app.inject({ method, url, headers: bearer(token), ...(payload ? { payload: payload as object } : {}) });
 
 beforeAll(async () => {
-  ctx = await setupTestApp();
+  ctx = await setupTestApp({ config: { MEDIA_ALLOWED_HOSTS: ['cdn.example.in'] } });
   alpha = await seedStore(ctx.db, 'alpha');
   token = (await adminToken(ctx, 'owner@example.com', [{ role: 'platform_owner', storeId: null }])).token;
 });
@@ -33,6 +33,26 @@ describe('storefront product list', () => {
     expect(item.minPricePaise).toBe(449_900);
     expect(item.maxMrpPaise).toBe(649_900);
     expect(item.imageUrl).toBe('https://cdn.example.in/first.jpg');
+    expect(item.hoverImageUrl).toBe('https://cdn.example.in/second.jpg');
+    expect(item.label).toBeNull();
+    expect(item.colours).toEqual([]);
+  });
+
+  it('returns the card label and distinct variant colours in variant order', async () => {
+    expect((await admin('POST', `${S()}/attributes`, { code: 'label', label: 'Card label', type: 'select', scope: 'product', options: ['Bestseller', 'New'] })).statusCode).toBe(201);
+    expect((await admin('POST', `${S()}/attributes`, { code: 'colour', label: 'Colour', type: 'select', scope: 'variant', options: ['Rust', 'Olive'] })).statusCode).toBe(201);
+    const product = (await admin('POST', `${S()}/products`, { slug: 'anarkali', title: 'Anarkali', taxRateBps: 500, attributes: { label: 'Bestseller' } })).json().product;
+    for (const [sku, colour, position] of [['AN-R-S', 'Rust', 0], ['AN-O-S', 'Olive', 1], ['AN-R-M', 'Rust', 2]] as const) {
+      const v = (await admin('POST', `${S()}/products/${product.id}/variants`, { skuCode: sku, title: sku, options: { colour }, position })).json().variant.id;
+      await admin('PUT', `${S()}/variants/${v}/price`, { mrpPaise: 500_000, pricePaise: 400_000 });
+    }
+    await admin('POST', `${S()}/products/${product.id}/status`, { status: 'published' });
+
+    const res = await ctx.app.inject({ method: 'GET', url: '/v1/storefront/products', headers: { host: alpha.host } });
+    const item = res.json().items.find((p: { slug: string }) => p.slug === 'anarkali');
+    expect(item.label).toBe('Bestseller');
+    expect(item.colours).toEqual(['Rust', 'Olive']);
+    expect(item.hoverImageUrl).toBeNull();
   });
 });
 

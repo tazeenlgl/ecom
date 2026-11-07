@@ -9,6 +9,9 @@ export type StoreSettings = {
   logoUrl?: string;
   faviconUrl?: string;
   announcement?: string;
+  layout?: { products?: { mobile: number; desktop: number }; categories?: { mobile: number; desktop: number } };
+  productOffer?: { code: string; text: string };
+  productPromo?: { title: string; text: string };
   contact?: { email?: string; phone?: string };
   social?: Partial<Record<'instagram' | 'facebook' | 'youtube' | 'x' | 'whatsapp' | 'pinterest', string>>;
   seo?: { titleTemplate?: string; defaultDescription?: string };
@@ -33,9 +36,15 @@ export type ProductSummary = {
   slug: string;
   title: string;
   createdAt: string;
+  updatedAt: string;
+  noIndex: boolean;
   minPricePaise: number | null;
   maxMrpPaise: number | null;
   imageUrl: string | null;
+  /** Second photo, card label and variant colours (older API responses may omit them). */
+  hoverImageUrl?: string | null;
+  label?: string | null;
+  colours?: string[];
 };
 
 export type Media = { url: string; kind: string; altText: string | null; width: number | null; height: number | null; variantId: string | null };
@@ -49,6 +58,8 @@ export type Variant = {
   mrpPaise: number;
   pricePaise: number;
   inStock: boolean;
+  /** Tri-state from the POS cache; 'unknown' means the POS never reported this SKU. */
+  stock: 'in_stock' | 'out_of_stock' | 'unknown';
 };
 
 export type SizeChart = { name: string; chart: unknown; notes: string | null };
@@ -61,6 +72,10 @@ export type Product = {
   specifications: unknown;
   attributes: { code: string; label: string; value: unknown }[];
   seo: Seo;
+  canonicalUrl: string | null;
+  indexable: boolean;
+  metaDescription: string | null;
+  breadcrumbs: { name: string; slug: string }[];
   sizeChart: SizeChart | null;
   media: Media[];
   variants: Variant[];
@@ -74,6 +89,8 @@ export type HomepageSection = {
   heading?: string;
   body?: string;
   image?: Image;
+  mobileImage?: Image;
+  imageFocus?: { x: number; y: number };
   collectionSlug?: string;
   categorySlugs?: string[];
   productLimit?: number;

@@ -29,6 +29,8 @@ import { paymentWebhookRoutes } from './modules/payments/webhook-routes.js';
 import { DnsDomainVerifier } from './modules/platform/domain-verifier.js';
 import { platformRoutes } from './modules/platform/routes.js';
 import { UnconfiguredPosGateway } from './modules/pos/unconfigured-gateway.js';
+import { localMediaRoutes, mediaAdminRoutes } from './modules/media/routes.js';
+import { LocalMediaStorage, R2MediaStorage, type MediaStorage } from './modules/media/storage.js';
 import { promotionAdminRoutes } from './modules/promotions/admin-routes.js';
 import { reportRoutes } from './modules/reports/routes.js';
 import { shippingAdminRoutes, shippingStorefrontRoutes } from './modules/shipping/routes.js';
@@ -52,6 +54,14 @@ declare module 'fastify' {
 
 const REQUEST_ID = /^[A-Za-z0-9._-]{8,64}$/;
 
+/** All five R2_* variables select Cloudflare R2 (validated in config). None selects local disk in development and no storage in production. */
+export function mediaStorageFor(config: Config): MediaStorage | null {
+  if (config.R2_ACCOUNT_ID && config.R2_ACCESS_KEY_ID && config.R2_SECRET_ACCESS_KEY && config.R2_BUCKET_NAME && config.R2_PUBLIC_BASE_URL) {
+    return new R2MediaStorage({ accountId: config.R2_ACCOUNT_ID, accessKeyId: config.R2_ACCESS_KEY_ID, secretAccessKey: config.R2_SECRET_ACCESS_KEY, bucket: config.R2_BUCKET_NAME, publicBaseUrl: config.R2_PUBLIC_BASE_URL });
+  }
+  return config.NODE_ENV === 'development' ? new LocalMediaStorage(config.MEDIA_LOCAL_DIR) : null;
+}
+
 /** Builds the adapters selected by configuration. Only non-live adapters exist. */
 export function createContext({ config, db, overrides = {} }: AppDeps, log: { info: (...args: never[]) => void }): AppContext {
   const payments: PaymentProviders = new Map();
@@ -63,6 +73,7 @@ export function createContext({ config, db, overrides = {} }: AppDeps, log: { in
   return {
     config,
     db,
+    media: mediaStorageFor(config),
     pos: new UnconfiguredPosGateway(),
     payments,
     messages: config.SMS_PROVIDER === 'log' ? new LogMessageSender(log as never) : new DisabledMessageSender(),
@@ -128,6 +139,8 @@ export async function buildApp(deps: AppDeps) {
     { prefix: '/v1/storefront' },
   );
 
+  if (ctx.media instanceof LocalMediaStorage) await app.register(localMediaRoutes(ctx.media), { prefix: '/v1' });
+
   // Admin API: platform-hosted; store-scoped routes take the store id in the path
   // and every one of them checks the admin's permission for that store.
   await app.register(
@@ -144,6 +157,7 @@ export async function buildApp(deps: AppDeps) {
       await admin.register(jobAdminRoutes(ctx));
       await admin.register(reportRoutes(ctx));
       await admin.register(paytmAdminRoutes(ctx));
+      await admin.register(mediaAdminRoutes(ctx));
     },
     { prefix: '/v1/admin' },
   );

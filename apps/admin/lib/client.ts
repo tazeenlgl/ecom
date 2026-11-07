@@ -34,6 +34,15 @@ export async function api<T>(path: string, init: { method?: string; body?: unkno
   return body as T;
 }
 
+/** Uploads an image as raw bytes through the BFF (the API validates type, content and size). */
+export async function uploadImage<T>(path: string, file: File): Promise<T> {
+  const res = await fetch(`/api/admin/${path.replace(/^\//, '')}`, { method: 'POST', credentials: 'same-origin', headers: { accept: 'application/json', 'content-type': file.type, [CSRF_HEADER]: csrfToken() }, body: file });
+  const body = (await res.json().catch(() => null)) as { error?: { code: string; message: string } } | null;
+  if (res.status === 401 && typeof window !== 'undefined') window.location.assign('/login?expired=1');
+  if (!res.ok) throw new ApiError(res.status, body?.error?.code ?? 'error', body?.error?.message ?? 'The image could not be uploaded.');
+  return body as T;
+}
+
 export function errorText(err: unknown): string {
   if (err instanceof ApiError) {
     const d = err.details;

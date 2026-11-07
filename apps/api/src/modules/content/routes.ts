@@ -5,6 +5,7 @@ import type { AppContext } from '../../context.js';
 import { contentBlocks, contentPages } from '../../db/schema.js';
 import { actorOf, recordAudit } from '../../lib/audit.js';
 import { notFound } from '../../lib/errors.js';
+import { assertMediaUrls } from '../../lib/media-url.js';
 import { defineRoute, seoSchema, slug, storeEntityParams, storeParams } from '../../lib/route.js';
 import { requireStore } from '../platform/routes.js';
 
@@ -23,6 +24,10 @@ const blockData = {
       heading: z.string().max(200).optional(),
       body: z.string().max(5000).optional(),
       image: image.optional(),
+      /** Hero slides only: a portrait-friendly image for narrow screens. */
+      mobileImage: image.optional(),
+      /** Hero slides only: the point of the image kept in view when it is cropped, as percentages from the top left. */
+      imageFocus: z.object({ x: z.number().min(0).max(100), y: z.number().min(0).max(100) }).strict().optional(),
       collectionSlug: slug.optional(),
       categorySlugs: z.array(slug).max(24).optional(),
       productLimit: z.number().int().min(1).max(48).optional(),
@@ -101,6 +106,8 @@ export function contentAdminRoutes(ctx: AppContext) {
     defineRoute(app, { method: 'PUT', url: '/stores/:storeId/blocks', summary: 'Create or replace a content block by kind and key', tag, auth, params: storeParams, body: blockBody }, async (request, { params, body }) =>
       ctx.db.transaction(async (tx) => {
         await requireStore(tx, params.storeId);
+        if (body.kind === 'banner') assertMediaUrls(ctx.config.MEDIA_ALLOWED_HOSTS, [body.data.image.url, body.data.mobileImage?.url], 'data.image');
+        if (body.kind === 'homepage_section') assertMediaUrls(ctx.config.MEDIA_ALLOWED_HOSTS, [body.data.image?.url, body.data.mobileImage?.url], 'data.image');
         const values = { ...body, ...toDates(body), storeId: params.storeId };
         const [block] = await tx
           .insert(contentBlocks)

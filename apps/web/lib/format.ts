@@ -38,6 +38,24 @@ const THEME_KEYS: Record<string, string> = {
   primaryForeground: '--brand-accent-fg',
   sale: '--brand-sale',
 };
+const clamp = (n: number | undefined, lo: number, hi: number, fallback: number) => (Number.isInteger(n) ? Math.min(hi, Math.max(lo, n as number)) : fallback);
+
+/**
+ * Cards per row set by the store (phone and computer) for products and categories, as CSS variables. The tablet count is
+ * derived (never more than the computer count, at least 3 when it fits) so a store only has to think about two sizes.
+ */
+export function layoutStyle(layout: { products?: { mobile: number; desktop: number }; categories?: { mobile: number; desktop: number } } | undefined): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [key, prefix, dm, dd] of [['products', 'prod', 2, 4], ['categories', 'cat', 2, 5]] as const) {
+    const m = clamp(layout?.[key]?.mobile, 1, 3, dm);
+    const d = clamp(layout?.[key]?.desktop, 2, 6, dd);
+    out[`--${prefix}-m`] = String(m);
+    out[`--${prefix}-t`] = String(Math.min(d, Math.max(m, 3)));
+    out[`--${prefix}-d`] = String(d);
+  }
+  return out;
+}
+
 export function themeStyle(theme: Record<string, string> | undefined): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [key, value] of Object.entries(theme ?? {})) {

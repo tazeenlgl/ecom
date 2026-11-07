@@ -830,6 +830,91 @@
                         "type": "string",
                         "maxLength": 300
                       },
+                      "layout": {
+                        "type": "object",
+                        "properties": {
+                          "products": {
+                            "type": "object",
+                            "properties": {
+                              "mobile": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 3
+                              },
+                              "desktop": {
+                                "type": "integer",
+                                "minimum": 2,
+                                "maximum": 6
+                              }
+                            },
+                            "required": [
+                              "mobile",
+                              "desktop"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "categories": {
+                            "type": "object",
+                            "properties": {
+                              "mobile": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 3
+                              },
+                              "desktop": {
+                                "type": "integer",
+                                "minimum": 2,
+                                "maximum": 6
+                              }
+                            },
+                            "required": [
+                              "mobile",
+                              "desktop"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "additionalProperties": false
+                      },
+                      "productOffer": {
+                        "type": "object",
+                        "properties": {
+                          "code": {
+                            "type": "string",
+                            "pattern": "^[A-Za-z0-9_-]{1,32}$"
+                          },
+                          "text": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 120
+                          }
+                        },
+                        "required": [
+                          "code",
+                          "text"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "productPromo": {
+                        "type": "object",
+                        "properties": {
+                          "title": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 60
+                          },
+                          "text": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 160
+                          }
+                        },
+                        "required": [
+                          "title",
+                          "text"
+                        ],
+                        "additionalProperties": false
+                      },
                       "contact": {
                         "type": "object",
                         "properties": {
@@ -1087,6 +1172,91 @@
                       "announcement": {
                         "type": "string",
                         "maxLength": 300
+                      },
+                      "layout": {
+                        "type": "object",
+                        "properties": {
+                          "products": {
+                            "type": "object",
+                            "properties": {
+                              "mobile": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 3
+                              },
+                              "desktop": {
+                                "type": "integer",
+                                "minimum": 2,
+                                "maximum": 6
+                              }
+                            },
+                            "required": [
+                              "mobile",
+                              "desktop"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "categories": {
+                            "type": "object",
+                            "properties": {
+                              "mobile": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 3
+                              },
+                              "desktop": {
+                                "type": "integer",
+                                "minimum": 2,
+                                "maximum": 6
+                              }
+                            },
+                            "required": [
+                              "mobile",
+                              "desktop"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "additionalProperties": false
+                      },
+                      "productOffer": {
+                        "type": "object",
+                        "properties": {
+                          "code": {
+                            "type": "string",
+                            "pattern": "^[A-Za-z0-9_-]{1,32}$"
+                          },
+                          "text": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 120
+                          }
+                        },
+                        "required": [
+                          "code",
+                          "text"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "productPromo": {
+                        "type": "object",
+                        "properties": {
+                          "title": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 60
+                          },
+                          "text": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 160
+                          }
+                        },
+                        "required": [
+                          "title",
+                          "text"
+                        ],
+                        "additionalProperties": false
                       },
                       "contact": {
                         "type": "object",
@@ -1965,6 +2135,43 @@
                             "required": [
                               "url"
                             ]
+                          },
+                          "mobileImage": {
+                            "type": "object",
+                            "properties": {
+                              "url": {
+                                "type": "string",
+                                "maxLength": 1000,
+                                "format": "uri"
+                              },
+                              "alt": {
+                                "type": "string",
+                                "maxLength": 300
+                              }
+                            },
+                            "required": [
+                              "url"
+                            ]
+                          },
+                          "imageFocus": {
+                            "type": "object",
+                            "properties": {
+                              "x": {
+                                "type": "number",
+                                "minimum": 0,
+                                "maximum": 100
+                              },
+                              "y": {
+                                "type": "number",
+                                "minimum": 0,
+                                "maximum": 100
+                              }
+                            },
+                            "required": [
+                              "x",
+                              "y"
+                            ],
+                            "additionalProperties": false
                           },
                           "collectionSlug": {
                             "type": "string",
@@ -3583,6 +3790,93 @@
         ],
         "responses": {
           "200": {
+            "description": "Success"
+          },
+          "4XX": {
+            "description": "Client error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/stores/{storeId}/media": {
+      "post": {
+        "summary": "Upload an image (raw body, Content-Type image/jpeg, image/png or image/webp). Returns its public address.",
+        "tags": [
+          "Admin: media"
+        ],
+        "description": "Requires permission `content.write` for the store in the path. 30 uploads per minute per admin user in each API instance",
+        "x-permission": "content.write",
+        "security": [
+          {
+            "adminBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "storeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "purpose",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "default": "hero",
+              "type": "string",
+              "enum": [
+                "hero"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "image/jpeg": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            },
+            "image/png": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            },
+            "image/webp": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
             "description": "Success"
           },
           "4XX": {

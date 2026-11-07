@@ -1,4 +1,5 @@
 import { sql } from 'drizzle-orm';
+import { MemoryMediaStorage, type MediaStorage } from '../src/modules/media/storage.js';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import { buildApp } from '../src/app.js';
 import { testConfig, type Config } from '../src/config/env.js';
@@ -31,7 +32,7 @@ export class FakeDns {
  * External integrations are fakes: log-only messages, FakePaymentProvider,
  * FakeDns, and the given POS gateway (unconfigured by default).
  */
-export async function setupTestApp(options: { pos?: PosGateway; paytmFetch?: typeof fetch; config?: Partial<Config> } = {}) {
+export async function setupTestApp(options: { media?: MediaStorage | null; pos?: PosGateway; paytmFetch?: typeof fetch; config?: Partial<Config> } = {}) {
   const { db, pool } = createDatabase(TEST_DATABASE_URL);
   try {
     // Never wipe a database that is not provably disposable (checked against the live connection).
@@ -63,6 +64,7 @@ export async function setupTestApp(options: { pos?: PosGateway; paytmFetch?: typ
         ['paytm', paytm],
       ]),
       dns,
+      media: options.media === undefined ? new MemoryMediaStorage() : options.media,
       pos: options.pos ?? new UnconfiguredPosGateway(),
       now: () => new Date(Date.now() + clock.offsetMs),
     },

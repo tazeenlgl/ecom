@@ -1,5 +1,6 @@
 import type { Config } from './config/env.js';
 import type { Database } from './db/client.js';
+import type { MediaStorage } from './modules/media/storage.js';
 import type { MessageSender } from './modules/notifications/sender.js';
 import type { PaymentProviders } from './modules/payments/provider.js';
 import type { DomainVerifier } from './modules/platform/domain-verifier.js';
@@ -9,6 +10,8 @@ import type { PosGateway } from './modules/pos/gateway.js';
 export type AppContext = {
   config: Config;
   db: Database;
+  /** Null when no image storage is configured (uploads answer 503). */
+  media: MediaStorage | null;
   pos: PosGateway;
   payments: PaymentProviders;
   messages: MessageSender;

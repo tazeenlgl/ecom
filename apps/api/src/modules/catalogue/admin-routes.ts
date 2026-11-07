@@ -18,6 +18,7 @@ import {
 } from '../../db/schema.js';
 import { actorOf, recordAudit } from '../../lib/audit.js';
 import { AppError, notFound } from '../../lib/errors.js';
+import { assertMediaUrls } from '../../lib/media-url.js';
 import { cursorCondition, pageQuery, toPage } from '../../lib/pagination.js';
 import { defineRoute, paise, seoSchema, slug, storeEntityParams, storeParams } from '../../lib/route.js';
 import { requireStore } from '../platform/routes.js';
@@ -530,8 +531,9 @@ export function catalogueAdminRoutes(ctx: AppContext) {
           position: z.number().int().default(0),
         }),
       },
-      async (request, { params, body }) =>
-        ctx.db.transaction(async (tx) => {
+      async (request, { params, body }) => {
+        assertMediaUrls(ctx.config.MEDIA_ALLOWED_HOSTS, [body.url]);
+        return ctx.db.transaction(async (tx) => {
           await findProduct(tx, params.storeId, params.id);
           if (body.variantId) {
             const [v] = await tx
@@ -543,7 +545,8 @@ export function catalogueAdminRoutes(ctx: AppContext) {
           const [media] = await tx.insert(productMedia).values({ ...body, storeId: params.storeId, productId: params.id }).returning();
           await recordAudit(tx, { storeId: params.storeId, actor: actorOf(request), action: 'media.add', entityType: 'product', entityId: params.id, changes: { mediaId: media!.id } });
           return { media };
-        }),
+        });
+      },
     );
 
     defineRoute(

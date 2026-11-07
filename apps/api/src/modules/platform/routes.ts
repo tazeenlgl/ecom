@@ -9,6 +9,7 @@ import { newToken } from '../../lib/crypto.js';
 import { AppError, notFound } from '../../lib/errors.js';
 import { cursorCondition, pageQuery, toPage } from '../../lib/pagination.js';
 import { defineRoute, slug, storeEntityParams, storeParams } from '../../lib/route.js';
+import { assertMediaUrls } from '../../lib/media-url.js';
 import { hasPermission } from '../iam/permissions.js';
 import { normalizeHost } from '../tenancy/host.js';
 import { verificationRecordName } from './domain-verifier.js';
@@ -111,6 +112,7 @@ export function platformRoutes(ctx: AppContext) {
       },
       async (request, { body }) =>
         ctx.db.transaction(async (tx) => {
+          assertMediaUrls(ctx.config.MEDIA_ALLOWED_HOSTS, [body.publicSettings?.logoUrl, body.publicSettings?.faviconUrl], 'publicSettings');
           const [brand] = await tx.select().from(brands).where(eq(brands.id, body.brandId));
           if (!brand) throw notFound('Brand');
           // New stores start in maintenance until a domain is verified and the catalogue is ready.
@@ -151,6 +153,7 @@ export function platformRoutes(ctx: AppContext) {
         }
         return ctx.db.transaction(async (tx) => {
           await requireStore(tx, params.storeId);
+          assertMediaUrls(ctx.config.MEDIA_ALLOWED_HOSTS, [body.publicSettings?.logoUrl, body.publicSettings?.faviconUrl], 'publicSettings');
           const [store] = await tx.update(stores).set(body).where(eq(stores.id, params.storeId)).returning();
           await recordAudit(tx, { storeId: params.storeId, actor: actorOf(request), action: 'store.update', entityType: 'store', entityId: params.storeId, changes: body });
           return { store };
