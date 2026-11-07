@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* `ed:` styles apply only inside a store that opted into the editorial look (<html data-variant="editorial">). Other stores are untouched. */
+@custom-variant ed (&:where([data-variant="editorial"] *));
+
 /* Brand tokens. Each store overrides these from its admin theme settings (see lib/format.ts themeStyle). */
 :root {
   /* TAZEEN: plum #5B277A on warm ivory with plum-tinted neutrals. Text/background pairs are all above WCAG AA (4.5:1). */
@@ -27,6 +30,7 @@
   --font-sans: var(--font-body), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-display: var(--font-heading), ui-serif, Georgia, "Times New Roman", serif;
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-editorial: cubic-bezier(0.3, 1, 0.3, 1);
 }
 
 html { background: var(--brand-bg); color: var(--brand-fg); -webkit-font-smoothing: antialiased; scroll-behavior: smooth; }
@@ -36,8 +40,27 @@ input[aria-invalid="true"], select[aria-invalid="true"] { border-color: var(--br
 :focus-visible { outline: 2px solid var(--brand-accent); outline-offset: 2px; }
 a { transition: color 0.2s; }
 
+/* Editorial look (opt-in per store). Header height at md+ is h-20 = 5rem; the hero radius is used by the mobile image card. */
+.no-scrollbar { scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+
+[data-variant="editorial"] { --header-h: 5rem; --radius-hero: 1.5rem; --hero-max-h: 900px; }
+
+/*
+ * Transparent header over a full-bleed hero (tablet and desktop only). The hero marks itself with data-hero-bleed; the header
+ * is pulled over it with a negative margin and turns into the existing translucent bar once the page scrolls or a menu opens.
+ */
+@media (min-width: 768px) {
+  [data-variant="editorial"] body:has([data-hero-bleed]) .site-header { margin-bottom: calc(var(--header-h) * -1); }
+  [data-variant="editorial"] body:has([data-hero-bleed]) .site-header[data-state="clear"] { background-color: transparent; border-color: transparent; color: #fff; backdrop-filter: none; }
+  [data-variant="editorial"] body:has([data-hero-bleed]) .site-header[data-state="clear"] .site-logo { filter: brightness(0) invert(1); }
+  [data-variant="editorial"] body:has([data-hero-bleed]) .site-header[data-state="clear"] nav a { color: #fff; }
+  [data-variant="editorial"] body:has([data-hero-bleed]) .site-header[data-state="clear"] nav a::after { background-color: #fff; }
+  [data-variant="editorial"] body:has([data-hero-bleed]) .site-header[data-state="clear"] .btn-ghost:hover { background-color: rgb(255 255 255 / 0.18); color: #fff; }
+}
+
 @utility container-x { @apply mx-auto w-full max-w-[1440px] px-4 sm:px-6 lg:px-10; }
-@utility btn { @apply inline-flex items-center justify-center gap-2 rounded-full px-6 py-3 text-sm font-medium tracking-wide transition duration-300 ease-out-expo disabled:cursor-not-allowed disabled:opacity-50; }
+@utility btn { @apply inline-flex items-center justify-center gap-2 rounded-full px-6 py-3 text-sm font-medium tracking-[0.08em] transition duration-300 ease-out-expo disabled:cursor-not-allowed disabled:opacity-50; }
 @utility btn-primary { @apply btn bg-accent text-accent-fg hover:brightness-110 active:scale-[0.98]; }
 @utility btn-outline { @apply btn border border-accent/40 text-accent hover:border-accent hover:bg-accent hover:text-accent-fg; }
 @utility btn-ghost { @apply btn px-3 py-2 hover:bg-accent-soft hover:text-accent; }
@@ -50,6 +73,9 @@ a { transition: color 0.2s; }
 
 .skeleton { background: linear-gradient(90deg, var(--brand-line) 0%, color-mix(in srgb, var(--brand-line) 40%, white) 50%, var(--brand-line) 100%); background-size: 200% 100%; animation: shimmer 1.4s infinite linear; }
 @keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+
+.hero-zoom { animation: heroZoom 14s ease-out forwards; }
+@keyframes heroZoom { from { transform: scale(1.06); } to { transform: scale(1); } }
 
 .marquee { animation: marquee 30s linear infinite; }
 @keyframes marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }

@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { CSRF_COOKIE, CSRF_HEADER, SESSION_COOKIE, csrfOk, safeProxyPath } from '@/lib/csrf';
 
+const MAX_UPLOAD_BYTES = 9_000_000;
 const API_URL = (process.env.ADMIN_API_URL ?? 'http://localhost:4000').replace(/\/$/, '');
 
 /**
@@ -25,7 +26,11 @@ async function handle(req: NextRequest, ctx: { params: Promise<{ path: string[] 
   if (!token) return NextResponse.json({ error: { code: 'unauthenticated', message: 'Sign in required.' } }, { status: 401 });
 
   const hasBody = !['GET', 'HEAD'].includes(req.method);
-  const text = hasBody ? await req.text() : '';
+  // Image uploads are forwarded as raw bytes; the API checks the content, size and permission.
+  const imageType = /^image\/(jpeg|png|webp)$/.exec(req.headers.get('content-type') ?? '')?.[0] ?? null;
+  if (imageType && Number(req.headers.get('content-length') ?? 0) > MAX_UPLOAD_BYTES) return NextResponse.json({ error: { code: 'invalid_request', message: 'The image is too large.' } }, { status: 413 });
+  const bytes = hasBody && imageType ? await req.arrayBuffer() : null;
+  const text = hasBody && !imageType ? await req.text() : '';
   const idem = req.headers.get('idempotency-key');
   let upstream: Response;
   try {
@@ -34,10 +39,10 @@ async function handle(req: NextRequest, ctx: { params: Promise<{ path: string[] 
       headers: {
         accept: 'application/json',
         authorization: `Bearer ${token}`,
-        ...(hasBody && text ? { 'content-type': 'application/json' } : {}),
+        ...(bytes ? { 'content-type': imageType! } : hasBody && text ? { 'content-type': 'application/json' } : {}),
         ...(idem ? { 'idempotency-key': idem } : {}),
       },
-      body: hasBody && text ? text : undefined,
+      body: bytes ?? (hasBody && text ? text : undefined),
       cache: 'no-store',
     });
   } catch {

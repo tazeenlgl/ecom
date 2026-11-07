@@ -125,4 +125,16 @@ describe('image address policy on the admin API', () => {
     const section = await call('PUT', `${S()}/blocks`, { kind: 'homepage_section', key: 'hero', status: 'draft', position: 0, data: { layout: 'hero', image: { url: 'https://127.0.0.1/h.jpg' } } });
     expect(section.statusCode).toBe(400);
   });
+
+  it('validates the hero slide mobile image and focal point', async () => {
+    const slide = (data: object) => call('PUT', `${S()}/blocks`, { kind: 'homepage_section', key: 'hero-slide-1', status: 'draft', position: 0, data: { layout: 'hero', ...data } });
+    const ok = { image: { url: 'https://cdn.example.com/d.jpg', alt: 'd' }, mobileImage: { url: 'https://cdn.example.com/m.jpg', alt: 'm' }, imageFocus: { x: 50, y: 20 } };
+    expect((await slide(ok)).statusCode).toBe(200);
+    expect((await slide({ image: ok.image })).statusCode).toBe(200);
+    expect((await slide({ ...ok, mobileImage: { url: 'https://evil.example/m.jpg' } })).statusCode).toBe(400);
+    expect((await slide({ ...ok, mobileImage: { url: 'https://127.0.0.1/m.jpg' } })).statusCode).toBe(400);
+    for (const imageFocus of [{ x: -1, y: 0 }, { x: 0, y: 101 }, { x: 'a', y: 0 }, { x: 1 }, { x: 1, y: 1, z: 1 }]) {
+      expect((await slide({ ...ok, imageFocus })).statusCode, JSON.stringify(imageFocus)).toBe(400);
+    }
+  });
 });

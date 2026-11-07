@@ -102,3 +102,11 @@ describe('image loader', () => {
     expect(loader({ src: 'https://cdn.example.com/a.jpg', width: 640 })).toBe('https://cdn.example.com/a.jpg');
   });
 });
+
+describe('development media addresses', () => {
+  it('maps only the local pseudo host to /dev-media and refuses look-alikes', async () => {
+    const { localMediaPath } = await import('../lib/media-hosts');
+    expect(localMediaPath('https://local-media.test/stores/s/hero/a.png')).toBe('/dev-media/stores/s/hero/a.png');
+    for (const bad of ['http://local-media.test/x.png', 'https://evil.local-media.test/x.png', 'https://local-media.test.evil.com/x.png', 'https://u:p@local-media.test/x.png', '/photos/x.jpg', 'not a url']) expect(localMediaPath(bad), bad).toBeNull();
+  });
+});

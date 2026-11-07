@@ -31,23 +31,17 @@ export function Header({ storeName, logoUrl, nav, signedIn }: { storeName: strin
   return (
     <>
       <header
-        className={`sticky top-0 z-40 transition-all duration-500 ease-out-expo ${scrolled ? 'border-b border-line bg-bg/85 backdrop-blur-xl' : 'bg-bg'}`}
+        data-state={scrolled || menu !== null ? 'solid' : 'clear'}
+        className={`site-header sticky top-0 z-40 transition-all duration-500 ease-out-expo ${scrolled ? 'border-b border-line bg-bg/85 backdrop-blur-xl' : 'bg-bg'}`}
         onMouseLeave={() => setMenu(null)}
       >
-        <div className={`container-x flex items-center gap-6 transition-all duration-500 ease-out-expo ${scrolled ? 'h-16' : 'h-20'}`}>
-          <button className="btn-ghost -ml-3 rounded-full lg:hidden" aria-label="Open menu" onClick={() => setMobile(true)}>
+        <div className={`container-x grid grid-cols-[1fr_auto_1fr] items-center gap-2 ed:max-md:flex ed:max-md:gap-2 sm:gap-4 transition-all duration-500 ease-out-expo ${scrolled ? 'h-14 sm:h-16' : 'h-16 sm:h-20'}`}>
+          <div className="flex items-center ed:max-md:shrink-0">
+          <button className="btn-ghost -ml-2 rounded-full px-2! sm:-ml-3 sm:px-3! lg:hidden" aria-label="Open menu" onClick={() => setMobile(true)}>
             <MenuIcon />
           </button>
 
-          <Link href="/" className="flex items-center gap-2 lg:mr-6" aria-label={`${storeName} home`}>
-            {logoUrl ? (
-              <Image src={logoUrl} alt={storeName} width={150} height={50} className="h-10 w-auto object-contain sm:h-12" priority />
-            ) : (
-              <span className="whitespace-nowrap font-display text-xl tracking-tight sm:text-2xl">{storeName}</span>
-            )}
-          </Link>
-
-          <nav className="hidden flex-1 items-center gap-1 lg:flex" aria-label="Main">
+          <nav className="hidden items-center gap-1 lg:flex" aria-label="Main">
             {items.map((item, i) => (
               <div key={item.href + item.label} onMouseEnter={() => setMenu(item.children?.length ? i : null)}>
                 <Link
@@ -60,15 +54,28 @@ export function Header({ storeName, logoUrl, nav, signedIn }: { storeName: strin
               </div>
             ))}
           </nav>
+          </div>
 
-          <div className="ml-auto flex items-center gap-1">
-            <button className="btn-ghost rounded-full" aria-label="Search" onClick={() => setSearch(true)}>
+          <Link href="/" className="flex items-center justify-center" aria-label={`${storeName} home`}>
+            {logoUrl ? (
+              <Image src={logoUrl} alt={storeName} width={150} height={50} className="site-logo h-8 w-auto object-contain sm:h-11" priority />
+            ) : (
+              <span className="whitespace-nowrap font-display text-2xl font-medium tracking-[0.14em] uppercase sm:text-3xl">{storeName}</span>
+            )}
+          </Link>
+
+          <div className="flex items-center justify-end ed:max-md:min-w-0 ed:max-md:flex-1 ed:max-md:gap-1">
+            <button type="button" className="hidden h-10 min-w-0 flex-1 items-center justify-between rounded-full border border-line bg-surface px-4 text-left text-sm text-muted ed:max-md:flex" aria-label="Search" onClick={() => setSearch(true)}>
+              <span className="truncate">Search</span>
               <SearchIcon />
             </button>
-            <Link href={signedIn ? '/account' : '/login'} className="btn-ghost rounded-full" aria-label={signedIn ? 'Your account' : 'Sign in'}>
+            <button className="btn-ghost rounded-full px-2! sm:px-3! ed:max-md:hidden" aria-label="Search" onClick={() => setSearch(true)}>
+              <SearchIcon />
+            </button>
+            <Link href={signedIn ? '/account' : '/login'} className="btn-ghost rounded-full px-2! sm:px-3! ed:max-md:hidden" aria-label={signedIn ? 'Your account' : 'Sign in'}>
               <UserIcon />
             </Link>
-            <button className="btn-ghost relative rounded-full" aria-label={`Bag, ${count} items`} onClick={() => setOpen(true)}>
+            <button className="btn-ghost relative rounded-full px-2! sm:px-3!" aria-label={`Bag, ${count} items`} onClick={() => setOpen(true)}>
               <BagIcon />
               <AnimatePresence>
                 {count > 0 && (
@@ -96,7 +103,7 @@ export function Header({ storeName, logoUrl, nav, signedIn }: { storeName: strin
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
               transition={{ duration: 0.25 }}
-              className="absolute inset-x-0 top-full hidden border-b border-line bg-bg/95 backdrop-blur-xl lg:block"
+              className="absolute inset-x-0 top-full hidden border-b border-line bg-bg/95 text-fg backdrop-blur-xl lg:block"
             >
               <div className="container-x grid grid-cols-4 gap-10 py-10">
                 {items[menu]!.children!.map((col) => (

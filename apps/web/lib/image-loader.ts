@@ -1,4 +1,4 @@
-import { isAllowedMediaUrl, parseMediaHosts } from './media-hosts';
+import { isAllowedMediaUrl, localMediaPath, parseMediaHosts } from './media-hosts';
 
 /**
  * Image loader for next/image. Addresses on an allowed host go through the optimizer (/_next/image). Anything else
@@ -10,6 +10,8 @@ import { isAllowedMediaUrl, parseMediaHosts } from './media-hosts';
 const hosts = parseMediaHosts(process.env.MEDIA_ALLOWED_HOSTS);
 
 export default function imageLoader({ src, width, quality }: { src: string; width: number; quality?: number }): string {
+  const local = localMediaPath(src); // development uploads: shown straight from the API, never through the optimizer
+  if (local) return local;
   const remote = /^[a-z][a-z0-9+.-]*:|^\/\//i.test(src);
   if (remote && !isAllowedMediaUrl(src, hosts)) return src;
   return `/_next/image?url=${encodeURIComponent(src)}&w=${width}&q=${quality || 75}`;

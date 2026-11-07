@@ -34,6 +34,8 @@ export type RouteDef<P extends z.ZodType, Q extends z.ZodType, B extends z.ZodTy
   rateLimited?: boolean;
   /** Replaces the default "Rate limited per client IP." sentence in the OpenAPI description. */
   rateLimitNote?: string;
+  /** Documentation only: the body is binary data of these content types, not JSON. */
+  binaryBodyTypes?: readonly string[];
 };
 
 /** Route metadata collected for the OpenAPI document. */
@@ -50,6 +52,7 @@ export type RouteDoc = {
   idempotencyKey: boolean;
   rateLimited: boolean;
   rateLimitNote?: string;
+  binaryBodyTypes?: readonly string[];
 };
 
 declare module 'fastify' {
@@ -101,6 +104,7 @@ export function defineRoute<
     idempotencyKey: def.idempotencyKey ?? false,
     rateLimited: Boolean(def.rateLimit) || Boolean(def.rateLimited),
     ...(def.rateLimitNote ? { rateLimitNote: def.rateLimitNote } : {}),
+    ...(def.binaryBodyTypes ? { binaryBodyTypes: def.binaryBodyTypes } : {}),
   };
 
   app.route({

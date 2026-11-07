@@ -2,6 +2,29 @@
 
 Dates are when the change was committed. Nothing has been deployed.
 
+## Storefront redesign, Milestone 1: editorial look (uncommitted)
+
+- **Opt-in per store.** A store gets the Sky-inspired editorial look with `settings.theme.variant = "editorial"`; `STOREFRONT_EDITORIAL_STORES` (store slugs) turns it on for a local preview. Stores without it render exactly as before. All new styles sit behind an `ed:` Tailwind variant (`[data-variant="editorial"]`).
+- **Product page (editorial only):** rounded buy-box card, vertical thumbnail strip beside the gallery on desktop, filled size pills, taller Add to bag pill, display-font accordions. Styling only; cart, stock, price and variant logic untouched. Colour swatches and Buy It Now were not added (no colour data; would change checkout flow). Desktop shows all photos stacked with a floating thumbnail rail and a sticky card; phones get a swipe slider with arrows and dots under a card that overlaps the photo. Photos open in a full-screen viewer (Esc, arrow keys, focus returned). A numbered Key features tab block (Details, Specifications, Delivery & returns) appears only when the product has details or specifications, and "You may also like" shows up to 4 products from the product's own category.
+- **Product page offer (implemented):** new optional store setting `publicSettings.productOffer` `{ code, text }` (API schema, Admin → Settings fields "Product page offer code" and "Offer text"). On editorial product pages it shows as a collapsible "Where's the discount?" strip with a copy button. Display only; checkout still validates the coupon. Locally the demo store can't save settings until its logo is an https URL (known issue).
+- **Product page buy box (implemented):** stock line with a pulsing dot above the buy row, outlined "Buy it now" (adds to the cart, then opens the existing checkout), accordions in a bordered card with a Size guide row, and an optional promo note (`publicSettings.productPromo` `{ title, text }`, Admin → Settings; text only, changes no price). Pickup was not added: there is no pickup data; the PIN-code delivery check stays in its place.
+- **Header:** transparent over a full-bleed homepage hero on tablet and desktop (white logo and links), the existing translucent bar after scrolling or while a menu is open. Mobile keeps the compact opaque header.
+- **Hero:** full-height image with a pill call to action on tablet and desktop; on phones a rounded 4:5 card using the mobile image. The classic hero now honours the mobile image and focal point.
+- **Announcement:** optional inline link written as `[label](/path)` in the existing announcement setting; styling relaxed in the editorial look.
+- **Mobile top area (editorial, phones only):** header row of menu, logo, inline search pill and bag; tabs from the store navigation; a row of rounded category thumbnails using one real product photo per category. No API, Admin or database changes.
+
+## Storefront redesign, Phase 1 (uncommitted)
+
+No migration. Nothing deployed. Admin UI unchanged.
+
+Changed:
+- Storefront: quiet announcement bar, centred-wordmark header, editorial hero, and a three-slide hero carousel (`components/hero-carousel.tsx`, rules in `lib/hero-slides.ts`). Slides are `homepage_section` blocks with `layout: "hero"` and key `hero-slide-1` to `hero-slide-3`; the classic single `hero` block and all other sections render as before. Two or three usable slides make a carousel; one is a static hero. Autoplay (5.5 s) pauses on hover, focus, hidden tab, off-screen and under reduced motion.
+- API (additive, no migration): `homepage_section` data accepts optional `mobileImage` and `imageFocus` (`{x,y}` 0 to 100). `mobileImage` goes through the same `MEDIA_ALLOWED_HOSTS` check as `image`. `docs/openapi.json` regenerated.
+- Media upload (API only, no migration): `POST /v1/admin/stores/:storeId/media` (permission `content.write`, raw JPEG, PNG or WebP body, content-sniffed, size-capped, store-scoped server-generated key, audited, rate limited) through a storage adapter: Cloudflare R2 (SigV4 over fetch, no new dependency) when all five `R2_*` variables are set, local disk in development otherwise. Nothing was uploaded to any live service. The OpenAPI document now describes the body as binary images.
+- Admin: **Homepage hero** page (store menu). Three slide cards (`hero-slide-1` to `3`): heading, text, button, desktop and optional mobile image upload/replace/remove, focus X/Y with a crop preview, desktop and phone preview of unsaved edits, order, Save draft / Publish / Unpublish. Saves go through the existing blocks API. The Admin proxy now forwards raw image uploads. Replacing or removing an image only changes the block's address; no stored file is ever deleted.
+- Development: local uploads use the pseudo host `local-media.test`, mapped by the storefront image loader and Admin to the API's `/v1/media/*` (development servers only).
+- Status: implemented. No approved campaign photography exists yet, so crop and overlay on real images are unverified.
+
 ## 2026-11-06: Product SEO correctness (R1) and image host restriction (R2)
 
 Plan and decisions: `docs/product-management/`. No migration. Nothing deployed.

@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { Cormorant_Garamond, Montserrat } from 'next/font/google';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
+import { AnnouncementBar } from '@/components/announcement-bar';
 import { CartDrawer } from '@/components/cart-drawer';
 import { CartProvider } from '@/components/cart-provider';
 import { Header } from '@/components/header';
@@ -56,23 +57,13 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
   const { settings } = store;
 
   return (
-    <html lang={store.locale?.split('-')[0] || 'en'} className={`${body.variable} ${heading.variable}`} style={themeStyle(settings.theme)}>
+    <html lang={store.locale?.split('-')[0] || 'en'} className={`${body.variable} ${heading.variable}`} style={themeStyle(settings.theme)} data-variant={settings.theme?.variant}>
       <body className="min-h-dvh">
         <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[60] focus:rounded focus:bg-fg focus:px-4 focus:py-2 focus:text-bg">
           Skip to content
         </a>
         <CartProvider>
-          {settings.announcement && (
-            <div className="overflow-hidden bg-accent py-2 text-xs tracking-[0.16em] text-accent-fg uppercase">
-              <div className="marquee flex w-max gap-16 whitespace-nowrap">
-                {Array.from({ length: 8 }, (_, i) => (
-                  <span key={i} aria-hidden={i > 0}>
-                    {settings.announcement}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
+          {settings.announcement && <AnnouncementBar text={settings.announcement} />}
           <Header storeName={store.name} logoUrl={settings.logoUrl} nav={nav} signedIn={Boolean(customer)} />
           <main id="main">{children}</main>
           <CartDrawer />

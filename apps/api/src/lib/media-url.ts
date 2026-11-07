@@ -29,6 +29,8 @@ export function parseMediaHosts(raw: string | undefined): string[] {
   return [...new Set(entries)];
 }
 
+export const isAllowedMediaHost = (hosts: readonly string[], hostname: string) => matches(hosts, hostname);
+
 const matches = (hosts: readonly string[], hostname: string) =>
   hosts.some((h) => {
     if (!h.startsWith('*.')) return hostname === h;

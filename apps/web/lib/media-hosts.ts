@@ -44,3 +44,17 @@ export function isAllowedMediaUrl(raw: string | null | undefined, hosts: readonl
 
 /** `remotePatterns` for next.config: one entry per allowed host, https and the default port only. Empty list, no remote fetches. */
 export const remotePatternsFor = (hosts: readonly string[]) => hosts.map((hostname) => ({ protocol: 'https' as const, hostname, port: '' }));
+
+/** Pseudo host of development uploads (same constant as the API's local storage). Resolves nowhere; see localMediaPath. */
+export const LOCAL_MEDIA_HOST = 'local-media.test';
+
+/** https://local-media.test/<key> is served by the API at /v1/media/<key>; the development server rewrites /dev-media/* there. */
+export function localMediaPath(src: string): string | null {
+  try {
+    const url = new URL(src);
+    if (url.protocol === 'https:' && url.hostname === LOCAL_MEDIA_HOST && !url.username && !url.password) return `/dev-media${url.pathname}`;
+  } catch {
+    // not an absolute address
+  }
+  return null;
+}

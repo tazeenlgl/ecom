@@ -9,6 +9,8 @@ export type StoreSettings = {
   logoUrl?: string;
   faviconUrl?: string;
   announcement?: string;
+  productOffer?: { code: string; text: string };
+  productPromo?: { title: string; text: string };
   contact?: { email?: string; phone?: string };
   social?: Partial<Record<'instagram' | 'facebook' | 'youtube' | 'x' | 'whatsapp' | 'pinterest', string>>;
   seo?: { titleTemplate?: string; defaultDescription?: string };
@@ -82,6 +84,8 @@ export type HomepageSection = {
   heading?: string;
   body?: string;
   image?: Image;
+  mobileImage?: Image;
+  imageFocus?: { x: number; y: number };
   collectionSlug?: string;
   categorySlugs?: string[];
   productLimit?: number;

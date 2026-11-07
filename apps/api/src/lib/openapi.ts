@@ -57,7 +57,9 @@ export function buildOpenApi(routes: RouteDoc[]) {
       ...(typeof r.auth === 'object' && r.auth.admin ? { 'x-permission': r.auth.admin } : {}),
       security,
       parameters: [...parameters(r.params, 'path'), ...parameters(r.query, 'query'), ...headerParams],
-      ...(r.body && r.method !== 'GET' ? { requestBody: { required: true, content: { 'application/json': { schema: jsonSchema(r.body) } } } } : {}),
+      ...(r.body && r.method !== 'GET'
+        ? { requestBody: { required: true, content: r.binaryBodyTypes ? Object.fromEntries(r.binaryBodyTypes.map((t) => [t, { schema: { type: 'string', format: 'binary' } }])) : { 'application/json': { schema: jsonSchema(r.body) } } } }
+        : {}),
       responses: {
         [String(r.status)]: { description: r.status === 204 ? 'No content' : 'Success' },
         '4XX': { description: 'Client error', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },

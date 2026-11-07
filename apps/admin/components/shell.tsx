@@ -36,6 +36,7 @@ export function Shell({ children }: { children: ReactNode }) {
         { href: `${base}/orders`, label: 'Orders', show: can('orders.read', store.id) },
         { href: `${base}/customers`, label: 'Customers', show: can('customers.read', store.id) },
         { href: `${base}/content`, label: 'Content', show: can('store.read', store.id) },
+        { href: `${base}/homepage-hero`, label: 'Homepage hero', show: can('store.read', store.id) },
         { href: `${base}/shipping`, label: 'Shipping zones', show: can('store.read', store.id) },
         { href: `${base}/settings`, label: 'Store settings', show: can('store.read', store.id) },
         { href: `${base}/operations`, label: 'Operations', show: ['pos.manage', 'jobs.manage', 'audit.read', 'reports.read'].some((p) => can(p, store.id)) },
